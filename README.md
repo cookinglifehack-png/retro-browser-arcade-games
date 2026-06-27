@@ -18,8 +18,8 @@
 2. 遊びたい HTML ファイルをブラウザで開く
 
 ```bash
-git clone https://github.com/<your-username>/<repo-name>.git
-cd <repo-name>
+git clone https://github.com/cookinglifehack-png/retro-browser-arcade-games.git
+cd retro-browser-arcade-games
 # Windows
 start asteroids.html
 # macOS
@@ -34,7 +34,7 @@ xdg-open asteroids.html
 
 1. GitHub リポジトリの **Settings → Pages**
 2. **Source** を `main` ブランチ / `/ (root)` に設定
-3. 公開 URL（例: `https://<user>.github.io/<repo>/`）にアクセス
+3. 公開 URL: `https://cookinglifehack-png.github.io/retro-browser-arcade-games/` にアクセス
 
 ## ASTEROIDS — 操作
 
@@ -85,6 +85,6 @@ xdg-open asteroids.html
 
 MIT License — 自由に利用・改変・配布できます。詳細は [LICENSE](LICENSE) を参照してください。
 
-## 作者メモ
+## 作者
 
-個人開発・学習用のプロジェクトです。Issue や Pull Request も歓迎します。
+[cookinglifehack-png](https://github.com/cookinglifehack-png) — 個人開発・学習用のプロジェクトです。Issue や Pull Request も歓迎します。
