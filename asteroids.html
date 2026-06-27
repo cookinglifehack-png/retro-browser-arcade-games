@@ -1,0 +1,1565 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>ASTEROIDS</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html, body {
+      width: 100%; height: 100%;
+      overflow: hidden;
+      background: #000;
+      font-family: 'Press Start 2P', 'Courier New', monospace;
+      touch-action: none;
+    }
+
+    #gameCanvas {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+      cursor: crosshair;
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+      outline: none;
+    }
+
+    #ui-overlay {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      padding-top: 2vh;
+    }
+
+    .screen-panel {
+      pointer-events: auto;
+      text-align: center;
+      padding: 1.5rem 2rem;
+      border: 2px solid #0af;
+      background: rgba(0, 0, 0, 0.72);
+      box-shadow: 0 0 25px #0af, inset 0 0 40px rgba(0, 170, 255, 0.08);
+      max-width: 90vw;
+    }
+
+    .screen-panel h1 {
+      color: #fff;
+      font-size: clamp(1rem, 4vw, 2rem);
+      text-shadow: 0 0 10px #0af, 0 0 20px #0af;
+      letter-spacing: 0.15em;
+      margin-bottom: 1rem;
+      line-height: 1.4;
+    }
+
+    .screen-panel h2 {
+      color: #0f0;
+      font-size: clamp(0.6rem, 2.5vw, 1rem);
+      text-shadow: 0 0 8px #0f0;
+      margin-bottom: 1.2rem;
+      line-height: 1.6;
+    }
+
+    .screen-panel p {
+      color: #ccc;
+      font-size: clamp(0.45rem, 1.8vw, 0.65rem);
+      line-height: 2;
+      margin-bottom: 0.3rem;
+    }
+
+    .screen-panel .highlight { color: #0ff; }
+    .screen-panel .warn { color: #ff0; }
+    .screen-panel .danger { color: #f44; }
+
+    .btn {
+      margin: 0.5rem;
+      padding: 0.7rem 1.2rem;
+      font-family: inherit;
+      font-size: clamp(0.45rem, 1.8vw, 0.6rem);
+      color: #000;
+      background: #0f0;
+      border: 2px solid #0f0;
+      cursor: pointer;
+      letter-spacing: 0.05em;
+      box-shadow: 0 0 12px #0f0;
+      transition: all 0.12s;
+      line-height: 1.4;
+    }
+
+    .btn:hover {
+      background: #ff0;
+      border-color: #ff0;
+      box-shadow: 0 0 18px #ff0;
+      transform: scale(1.04);
+    }
+
+    .btn:disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .upgrade-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.6rem;
+      margin-top: 1rem;
+    }
+
+    .upgrade-btn {
+      text-align: left;
+      padding: 0.8rem;
+    }
+
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+  <canvas id="gameCanvas"></canvas>
+
+  <div id="ui-overlay">
+    <!-- スタート画面 -->
+    <div id="start-screen" class="screen-panel">
+      <h1>ASTEROIDS</h1>
+      <h2>RETRO VECTOR EDITION</h2>
+      <p><span class="highlight">↑ / SPACE</span> — 前進</p>
+      <p><span class="highlight">↓</span> — バック</p>
+      <p><span class="highlight">← →</span> — 空間を回転</p>
+      <p class="warn">自機は常に上向き・宇宙が回転する</p>
+      <p><span class="highlight">X</span> — 通常弾　<span class="highlight">Z</span> — ホーミング（リロード制）</p>
+      <p><span class="highlight">P</span> — ポーズ</p>
+      <p class="warn">UP出現率＝強化が少ないほど高い（被弾で回復）</p>
+      <p class="warn">被弾で強化半減 / 残機MAX5</p>
+      <p id="hi-score-start" class="highlight"></p>
+      <p class="highlight">SPACE / ENTER でも開始</p>
+      <button class="btn" id="btn-start">START GAME</button>
+    </div>
+
+    <!-- ポーズ画面 -->
+    <div id="pause-screen" class="screen-panel hidden">
+      <h1>PAUSED</h1>
+      <p>Press <span class="highlight">P</span> to resume</p>
+    </div>
+
+    <!-- ゲームオーバー -->
+    <div id="gameover-screen" class="screen-panel hidden">
+      <h1 class="danger">GAME OVER</h1>
+      <p>SCORE: <span id="final-score" class="highlight">0</span></p>
+      <p>HI-SCORE: <span id="final-hiscore" class="warn">0</span></p>
+      <p>WAVE: <span id="final-wave" class="highlight">1</span></p>
+      <button class="btn" id="btn-restart">RESTART</button>
+    </div>
+  </div>
+
+<script>
+(function () {
+  'use strict';
+
+  // ============================================================
+  //  Canvas & 基本設定
+  // ============================================================
+  const canvas = document.getElementById('gameCanvas');
+  const ctx = canvas.getContext('2d');
+  let W = window.innerWidth;
+  let H = window.innerHeight;
+  let SHIP_X = W / 2;
+  let SHIP_Y = H * 0.75;
+  let scrollX = 0, scrollY = 0;
+  let worldAngle = 0;
+
+  // エンティティ（resizeより前に宣言が必要）
+  let ship, asteroids, bullets, homingMissiles, particles, trails;
+  let ufo = null, upgradeItem = null, shields = [];
+
+  function scaleEntityPositions(sx, sy) {
+    const scalePos = (o) => {
+      if (o && o.x !== undefined) { o.x *= sx; o.y *= sy; }
+    };
+    if (asteroids) asteroids.forEach(scalePos);
+    if (bullets) bullets.forEach(scalePos);
+    if (homingMissiles) homingMissiles.forEach(scalePos);
+    if (particles) particles.forEach(scalePos);
+    if (trails) trails.forEach(scalePos);
+    if (ufo) scalePos(ufo);
+    if (upgradeItem) scalePos(upgradeItem);
+  }
+
+  function resize() {
+    const newW = window.innerWidth;
+    const newH = window.innerHeight;
+    if (W > 0 && H > 0 && (newW !== W || newH !== H)) {
+      scaleEntityPositions(newW / W, newH / H);
+    }
+    W = newW;
+    H = newH;
+    SHIP_X = W / 2;
+    SHIP_Y = H * 0.75;
+    canvas.width = W;
+    canvas.height = H;
+    if (ship) { ship.x = SHIP_X; ship.y = SHIP_Y; }
+  }
+  window.addEventListener('resize', resize);
+
+  // ============================================================
+  //  ユーティリティ
+  // ============================================================
+  const TAU = Math.PI * 2;
+  const rand = (a, b) => a + Math.random() * (b - a);
+  const randInt = (a, b) => Math.floor(rand(a, b + 1));
+  const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+  const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+  const wrap = (obj) => {
+    if (obj.x < 0) obj.x += W;
+    if (obj.x > W) obj.x -= W;
+    if (obj.y < 0) obj.y += H;
+    if (obj.y > H) obj.y -= H;
+  };
+
+  const shipPos = () => ({ x: SHIP_X, y: SHIP_Y });
+
+  // 空間を自機中心に回転（←→操作）
+  function rotatePoint(x, y, angle) {
+    const dx = x - SHIP_X, dy = y - SHIP_Y;
+    const c = Math.cos(angle), s = Math.sin(angle);
+    return { x: SHIP_X + dx * c - dy * s, y: SHIP_Y + dx * s + dy * c };
+  }
+
+  function rotateVel(vx, vy, angle) {
+    const c = Math.cos(angle), s = Math.sin(angle);
+    return { vx: vx * c - vy * s, vy: vx * s + vy * c };
+  }
+
+  function rotateWorld(dAngle) {
+    if (dAngle === 0 || !ship || !asteroids) return;
+    worldAngle += dAngle;
+
+    const rotateObj = (obj) => {
+      const p = rotatePoint(obj.x, obj.y, dAngle);
+      obj.x = p.x;
+      obj.y = p.y;
+      if (obj.vx !== undefined && obj.vy !== undefined) {
+        const v = rotateVel(obj.vx, obj.vy, dAngle);
+        obj.vx = v.vx;
+        obj.vy = v.vy;
+      }
+    };
+
+    asteroids.forEach(rotateObj);
+    bullets.forEach(rotateObj);
+    homingMissiles.forEach(rotateObj);
+    particles.forEach(rotateObj);
+    trails.forEach(rotateObj);
+    if (ufo) rotateObj(ufo);
+    if (upgradeItem) rotateObj(upgradeItem);
+
+    const wv = rotateVel(ship.worldVx, ship.worldVy, dAngle);
+    ship.worldVx = wv.vx;
+    ship.worldVy = wv.vy;
+  }
+
+  // ============================================================
+  //  Web Audio API — レトロサウンド
+  // ============================================================
+  let audioCtx = null;
+
+  function initAudio() {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+  }
+
+  function playTone(freq, dur, type = 'square', vol = 0.08, slide = 0) {
+    if (!audioCtx) return;
+    const t = audioCtx.currentTime;
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, t);
+    if (slide) osc.frequency.exponentialRampToValueAtTime(Math.max(20, freq + slide), t + dur);
+    gain.gain.setValueAtTime(vol, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start(t);
+    osc.stop(t + dur);
+  }
+
+  function sfxShoot() { playTone(880, 0.06, 'square', 0.05); }
+  function sfxExplosion() { playTone(120, 0.25, 'sawtooth', 0.1, -80); playTone(60, 0.35, 'square', 0.06, -40); }
+  function sfxHit() { playTone(200, 0.15, 'sawtooth', 0.12, -100); }
+  function sfxUfo() { playTone(440, 0.08, 'sine', 0.04); playTone(330, 0.08, 'sine', 0.03); }
+  function sfxUpgrade() { playTone(523, 0.1, 'square', 0.07); playTone(659, 0.1, 'square', 0.07); playTone(784, 0.15, 'square', 0.07); }
+  function sfxExtraLife() { playTone(440, 0.12, 'square', 0.06); playTone(554, 0.12, 'square', 0.06); playTone(659, 0.2, 'square', 0.06); }
+
+  // BGM — 低音パルス
+  let bgmInterval = null;
+  let bgmBeat = 0;
+
+  function startBGM() {
+    stopBGM();
+    bgmInterval = setInterval(() => {
+      if (!audioCtx || state !== 'playing') return;
+      const notes = [55, 55, 73.42, 55, 82.41, 55];
+      playTone(notes[bgmBeat % notes.length], 0.18, 'sine', 0.025);
+      bgmBeat++;
+    }, 400);
+  }
+
+  function stopBGM() {
+    if (bgmInterval) { clearInterval(bgmInterval); bgmInterval = null; }
+  }
+
+  // ============================================================
+  //  入力
+  // ============================================================
+  const keys = {};
+  const keyMap = {
+    ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right',
+    ' ': 'thrust', x: 'shoot', X: 'shoot', z: 'special', Z: 'special', p: 'pause', P: 'pause'
+  };
+
+  window.addEventListener('keydown', (e) => {
+    const k = keyMap[e.key];
+    if (k) { keys[k] = true; e.preventDefault(); }
+    if (e.key === 'p' || e.key === 'P') togglePause();
+    if ((e.key === 'Enter' || e.key === ' ') && (state === 'start' || state === 'gameover')) {
+      e.preventDefault();
+      startGame();
+    }
+  });
+  window.addEventListener('keyup', (e) => {
+    const k = keyMap[e.key];
+    if (k) keys[k] = false;
+  });
+
+  // ============================================================
+  //  ゲーム状態
+  // ============================================================
+  let state = 'start'; // start | playing | paused | upgrade | gameover
+  let score = 0, lives = 3, wave = 1;
+  let hiScore = 0;
+  try {
+    hiScore = parseInt(localStorage.getItem('asteroids_hiscore') || '0', 10) || 0;
+  } catch (e) {
+    hiScore = 0;
+  }
+  let asteroidsDestroyed = 0;
+  const UPGRADE_KILL_INTERVAL = 22;
+  const MAX_LIVES = 5;
+  const UPGRADE_CHANCE_MIN = 0.1;
+  const MAX_UPGRADE_TOTAL = 20; // 5種 × Lv4
+  let nextUpgradeAt = UPGRADE_KILL_INTERVAL;
+  let upgradeNotify = null;
+  let invincibleTimer = 0;
+  let waveClearTimer = 0;
+  let ufoTimer = 0;
+  let shakeTimer = 0;
+
+  // アップグレードレベル (0〜4)
+  const upgrades = {
+    fireRate: 0,
+    spread: 0,
+    range: 0,
+    homing: 0,
+    shields: 0
+  };
+
+  const UPGRADE_NAMES = {
+    fireRate: 'FIRE RATE',
+    spread: 'SPREAD SHOT',
+    range: 'BULLET RANGE',
+    homing: 'HOMING MISSILES',
+    shields: 'ORBITING SHIELDS'
+  };
+
+  const UPGRADE_DESC = {
+    fireRate: '発射間隔短縮',
+    spread: '弾数増加 (2→5way)',
+    range: '弾の飛距離UP',
+    homing: 'ミサイル数UP (2→5発)',
+    shields: 'シールド数・速度UP'
+  };
+
+  // ============================================================
+  //  パーティクル
+  // ============================================================
+  function spawnParticles(x, y, count, color, speed = 3) {
+    for (let i = 0; i < count; i++) {
+      const angle = rand(0, TAU);
+      const spd = rand(0.5, speed);
+      particles.push({
+        x, y,
+        vx: Math.cos(angle) * spd,
+        vy: Math.sin(angle) * spd,
+        life: rand(20, 50),
+        maxLife: 50,
+        color,
+        size: rand(1, 3)
+      });
+    }
+  }
+
+  function spawnExplosion(x, y, size = 1) {
+    spawnParticles(x, y, Math.floor(12 * size), '#fff', 4 * size);
+    spawnParticles(x, y, Math.floor(8 * size), '#0af', 3 * size);
+    spawnParticles(x, y, Math.floor(6 * size), '#0f0', 2 * size);
+    sfxExplosion();
+    shakeTimer = 8 * size;
+  }
+
+  // ============================================================
+  //  軌跡
+  // ============================================================
+  function addTrail(x, y, color, maxLen = 8) {
+    trails.push({ x, y, color, life: maxLen, maxLife: maxLen });
+  }
+
+  // ============================================================
+  //  隕石生成
+  // ============================================================
+  const ASTEROID_SIZES = {
+    large:  { r: 40, speed: 1.0,  points: 20,  verts: 10, next: 'medium', split: 2 },
+    medium: { r: 25, speed: 1.4,  points: 50,  verts: 8,  next: 'small',  split: 2 },
+    small:  { r: 14, speed: 1.8,  points: 100, verts: 6,  next: null,   split: 0 }
+  };
+
+  function createAsteroid(x, y, sizeKey, speedMult = 1) {
+    const def = ASTEROID_SIZES[sizeKey];
+    const angle = rand(0, TAU);
+    const spd = def.speed * speedMult * rand(0.7, 1.3);
+    const verts = [];
+    for (let i = 0; i < def.verts; i++) {
+      const a = (i / def.verts) * TAU;
+      verts.push({ angle: a, dist: rand(0.65, 1.0) });
+    }
+    return {
+      x: x ?? rand(0, W),
+      y: y ?? rand(0, H),
+      vx: Math.cos(angle) * spd,
+      vy: Math.sin(angle) * spd,
+      r: def.r,
+      rot: rand(0, TAU),
+      rotSpeed: rand(-0.03, 0.03),
+      size: sizeKey,
+      verts,
+      points: def.points
+    };
+  }
+
+  function spawnWaveAsteroids() {
+    asteroids = [];
+    const count = 4 + wave * 2;
+    const speedMult = 1 + (wave - 1) * 0.15;
+    for (let i = 0; i < count; i++) {
+      let ax, ay;
+      do {
+        ax = rand(0, W);
+        ay = rand(0, H);
+      } while (dist({ x: ax, y: ay }, shipPos()) < 120);
+      asteroids.push(createAsteroid(ax, ay, 'large', speedMult));
+    }
+  }
+
+  // ============================================================
+  //  宇宙船
+  // ============================================================
+  function createShip() {
+    return {
+      x: SHIP_X,
+      y: SHIP_Y,
+      worldVx: 0,
+      worldVy: 0,
+      thrusting: false,
+      backing: false
+    };
+  }
+
+  function resetShip() {
+    ship = createShip();
+    invincibleTimer = 120;
+  }
+
+  // タイトル画面用デモシーン
+  function initTitleDemo() {
+    bullets = [];
+    homingMissiles = [];
+    particles = [];
+    trails = [];
+    ufo = null;
+    upgradeItem = null;
+    shields = [];
+    resetShip();
+    asteroids = [];
+    for (let i = 0; i < 6; i++) {
+      const ast = createAsteroid(rand(0, W), rand(0, H), i % 3 === 0 ? 'large' : i % 3 === 1 ? 'medium' : 'small', 0.6);
+      ast.vx *= 0.5;
+      ast.vy *= 0.5;
+      asteroids.push(ast);
+    }
+  }
+
+  // ============================================================
+  //  弾丸
+  // ============================================================
+  let shootCooldown = 0;
+  let specialCooldown = 0;
+  let zReloadMax = 0;
+
+  const FIRE_RATE_COOLDOWN = [22, 18, 14, 10, 7];
+  const SPREAD_COUNT = [1, 2, 3, 4, 5];
+  const BULLET_LIFE = [55, 75, 95, 120, 150];
+  const SPREAD_ANGLE = 0.12;
+  const ROT_SPEED = 0.032;
+
+  function fireBullets() {
+    if (shootCooldown > 0) return;
+    const level = upgrades.fireRate;
+    shootCooldown = FIRE_RATE_COOLDOWN[level];
+    const count = SPREAD_COUNT[upgrades.spread];
+    const bulletLife = BULLET_LIFE[upgrades.range];
+    for (let i = 0; i < count; i++) {
+      const offset = count === 1 ? 0 : (i - (count - 1) / 2) * SPREAD_ANGLE;
+      bullets.push({
+        x: SHIP_X,
+        y: SHIP_Y,
+        vx: Math.sin(offset) * 8 + ship.worldVx,
+        vy: -Math.cos(offset) * 8 + ship.worldVy,
+        life: bulletLife,
+        type: 'normal'
+      });
+    }
+    sfxShoot();
+  }
+
+  const HOMING_RELOAD = 240;
+  const HOMING_COUNT = [1, 2, 3, 4, 5];
+  const HOMING_TURN = [0.035, 0.05, 0.055, 0.06, 0.065];
+  const HOMING_SPEED = [3.5, 4, 4.2, 4.4, 4.6];
+
+  function findNearestHomingTarget(from, exclude) {
+    let best = null, bestD = Infinity, bestType = null;
+    for (const ast of asteroids) {
+      if (exclude && exclude.has(ast)) continue;
+      const d = dist(from, ast);
+      if (d < bestD) { bestD = d; best = ast; bestType = 'asteroid'; }
+    }
+    if (ufo && !(exclude && exclude.has(ufo))) {
+      const d = dist(from, ufo);
+      if (d < bestD) { bestD = d; best = ufo; bestType = 'ufo'; }
+    }
+    return best ? { obj: best, type: bestType } : null;
+  }
+
+  function isValidHomingTarget(m) {
+    if (!m.target) return false;
+    if (m.targetType === 'ufo') return m.target === ufo;
+    if (m.targetType === 'asteroid') return asteroids.includes(m.target);
+    return false;
+  }
+
+  function fireHomingMissiles() {
+    const hLevel = upgrades.homing;
+    if (specialCooldown > 0) return;
+    zReloadMax = HOMING_RELOAD;
+    specialCooldown = HOMING_RELOAD;
+    const count = HOMING_COUNT[hLevel];
+    const usedTargets = new Set();
+    for (let i = 0; i < count; i++) {
+      const tgt = findNearestHomingTarget({ x: SHIP_X, y: SHIP_Y }, usedTargets);
+      let vx = rand(-0.3, 0.3) + ship.worldVx;
+      let vy = -2 + ship.worldVy;
+      if (tgt) {
+        usedTargets.add(tgt.obj);
+        const dx = tgt.obj.x - SHIP_X, dy = tgt.obj.y - SHIP_Y;
+        const a = Math.atan2(dy, dx);
+        const spd = HOMING_SPEED[hLevel] * 0.6;
+        vx = Math.cos(a) * spd + ship.worldVx;
+        vy = Math.sin(a) * spd + ship.worldVy;
+      }
+      homingMissiles.push({
+        x: SHIP_X,
+        y: SHIP_Y,
+        vx, vy,
+        speed: HOMING_SPEED[hLevel],
+        turnRate: HOMING_TURN[hLevel],
+        target: tgt ? tgt.obj : null,
+        targetType: tgt ? tgt.type : null
+      });
+    }
+    sfxShoot();
+  }
+
+  // ============================================================
+  //  オービットシールド
+  // ============================================================
+  const SHIELD_COUNT = [0, 1, 2, 3, 4];
+  const SHIELD_SPEED = [0, 0.01, 0.013, 0.016, 0.02];
+  const SHIELD_RADIUS = [0, 52, 58, 64, 70];
+  let shieldAngle = 0;
+
+  function updateShields() {
+    shields = [];
+    const level = upgrades.shields;
+    const count = SHIELD_COUNT[level];
+    if (count === 0) return;
+    const speed = SHIELD_SPEED[level];
+    shieldAngle += speed;
+    const radius = SHIELD_RADIUS[level];
+    for (let i = 0; i < count; i++) {
+      const a = shieldAngle + (i / count) * TAU;
+      shields.push({
+        x: SHIP_X + Math.cos(a) * radius,
+        y: SHIP_Y + Math.sin(a) * radius,
+        r: 5,
+        angle: a
+      });
+    }
+  }
+
+  // ============================================================
+  //  UFO
+  // ============================================================
+  function getUfoPower() {
+    const total = upgrades.fireRate + upgrades.spread + upgrades.range
+      + upgrades.homing + upgrades.shields;
+    const powerRatio = total / MAX_UPGRADE_TOTAL;
+    // 強化比率に連動（被弾で半減すると弱くなる）
+    return 0.6 + powerRatio * 0.92;
+  }
+
+  function spawnUFO() {
+    if (ufo) return;
+    const fromLeft = Math.random() < 0.5;
+    const power = getUfoPower();
+    let ux, uy, attempts = 0;
+    do {
+      ux = fromLeft ? -30 : W + 30;
+      uy = rand(40, H - 40);
+      attempts++;
+    } while (attempts < 25 && asteroids && asteroids.some((a) => dist({ x: ux, y: uy }, a) < a.r + 24));
+    ufo = {
+      x: ux,
+      y: uy,
+      vx: (fromLeft ? rand(1.2, 2.0) : rand(-2.0, -1.2)) * Math.min(power * 0.6, 1.2),
+      vy: rand(-0.35, 0.35) * Math.min(power * 0.5, 0.8),
+      r: 18,
+      power,
+      shootTimer: rand(85, 155) / Math.max(power, 0.5),
+      wobble: rand(0, TAU)
+    };
+    sfxUfo();
+  }
+
+  function fireUfoShots() {
+    if (!ufo) return;
+    const power = getUfoPower();
+    const dx = SHIP_X - ufo.x, dy = SHIP_Y - ufo.y;
+    const baseAngle = Math.atan2(dy, dx);
+    const bulletSpeed = 2.1 + power * 0.55;
+    const bulletLife = Math.floor(140 + power * 35);
+    const shotCount = power >= 1.05 ? (power >= 1.28 ? 2 : 1) : 1;
+    for (let s = 0; s < shotCount; s++) {
+      const spread = shotCount === 1 ? 0 : (s - (shotCount - 1) / 2) * 0.22;
+      const angle = baseAngle + spread;
+      bullets.push({
+        x: ufo.x, y: ufo.y,
+        vx: Math.cos(angle) * bulletSpeed,
+        vy: Math.sin(angle) * bulletSpeed,
+        life: bulletLife,
+        type: 'enemy',
+        r: 3
+      });
+    }
+  }
+
+  // UFOと隕石はすり抜け（どちらも破壊されない）
+  function separateUfoFromAsteroids() {
+    if (!ufo || !asteroids) return;
+    for (const ast of asteroids) {
+      const hitR = ufo.r + ast.r * 0.8;
+      const d = dist(ufo, ast);
+      if (d < hitR && d > 0.01) {
+        const overlap = hitR - d;
+        const nx = (ufo.x - ast.x) / d;
+        const ny = (ufo.y - ast.y) / d;
+        ufo.x += nx * overlap * 0.55;
+        ufo.y += ny * overlap * 0.55;
+        ast.x -= nx * overlap * 0.45;
+        ast.y -= ny * overlap * 0.45;
+        wrap(ast);
+      }
+    }
+  }
+
+  // ============================================================
+  //  アップグレードアイテム
+  // ============================================================
+  function spawnUpgradeItem() {
+    const angle = rand(0, TAU);
+    const distFromShip = rand(70, 130);
+    upgradeItem = {
+      x: SHIP_X + Math.cos(angle) * distFromShip,
+      y: SHIP_Y + Math.sin(angle) * distFromShip,
+      r: 18,
+      pulse: 0,
+      life: 900
+    };
+    wrap(upgradeItem);
+  }
+
+  function getTotalUpgradeLevels() {
+    return upgrades.fireRate + upgrades.spread + upgrades.range
+      + upgrades.homing + upgrades.shields;
+  }
+
+  // 強化比率が高いほど出現率DOWN、被弾で半減すると比率が下がり出現率UP
+  function getUpgradeDropChance() {
+    const powerRatio = getTotalUpgradeLevels() / MAX_UPGRADE_TOTAL;
+    return UPGRADE_CHANCE_MIN + (1 - powerRatio) * (1 - UPGRADE_CHANCE_MIN);
+  }
+
+  function getAvailableUpgrades() {
+    return Object.keys(upgrades).filter((k) => upgrades[k] < 4);
+  }
+
+  function applyRandomUpgrade() {
+    const avail = getAvailableUpgrades();
+    if (avail.length === 0) {
+      upgradeNotify = { text: 'ALL UPGRADES MAX!', timer: 120 };
+      score += 500;
+      sfxUpgrade();
+      return;
+    }
+    const key = avail[randInt(0, avail.length - 1)];
+    upgrades[key]++;
+    sfxUpgrade();
+    spawnParticles(SHIP_X, SHIP_Y, 24, '#0ff', 3);
+    spawnParticles(SHIP_X, SHIP_Y, 16, '#ff0', 2);
+    invincibleTimer = 90;
+    const dropPct = Math.round(getUpgradeDropChance() * 100);
+    upgradeNotify = {
+      text: UPGRADE_NAMES[key] + '  Lv.' + upgrades[key],
+      sub: UPGRADE_DESC[key] + ' / 出現' + dropPct + '%',
+      timer: 180
+    };
+  }
+
+  function halveUpgrades() {
+    let lost = false;
+    for (const key of Object.keys(upgrades)) {
+      if (upgrades[key] > 0) lost = true;
+      upgrades[key] = Math.floor(upgrades[key] / 2);
+    }
+    if (lost) {
+      const dropPct = Math.round(getUpgradeDropChance() * 100);
+      upgradeNotify = {
+        text: 'UPGRADES HALVED!',
+        sub: '被弾で半減 / 出現率' + dropPct + '%に回復',
+        timer: 160
+      };
+    }
+  }
+
+  // ============================================================
+  //  当たり判定
+  // ============================================================
+  function circleHit(a, b, ra, rb) {
+    return dist(a, b) < ra + rb;
+  }
+
+  function pointInAsteroid(px, py, ast) {
+    const dx = px - ast.x, dy = py - ast.y;
+    const d = Math.hypot(dx, dy);
+    return d < ast.r;
+  }
+
+  // ============================================================
+  //  隕石破壊
+  // ============================================================
+  function destroyAsteroid(index) {
+    const ast = asteroids[index];
+    score += ast.points;
+    asteroidsDestroyed++;
+    spawnExplosion(ast.x, ast.y, ast.r / 20);
+
+    const def = ASTEROID_SIZES[ast.size];
+    if (def.next) {
+      for (let i = 0; i < def.split; i++) {
+        const child = createAsteroid(ast.x, ast.y, def.next);
+        const angle = rand(0, TAU);
+        const spd = ASTEROID_SIZES[def.next].speed * 1.5;
+        child.vx = Math.cos(angle) * spd;
+        child.vy = Math.sin(angle) * spd;
+        asteroids.push(child);
+      }
+    }
+
+    asteroids.splice(index, 1);
+
+    if (asteroidsDestroyed >= nextUpgradeAt) {
+      nextUpgradeAt += UPGRADE_KILL_INTERVAL;
+      if (Math.random() < getUpgradeDropChance()) {
+        spawnUpgradeItem();
+      }
+    }
+
+    const prevScore = score - ast.points;
+    if (Math.floor(score / 10000) > Math.floor(prevScore / 10000) && lives < MAX_LIVES) {
+      lives++;
+      sfxExtraLife();
+    }
+  }
+
+  // ============================================================
+  //  プレイヤー被弾
+  // ============================================================
+  function killShip() {
+    if (invincibleTimer > 0) return;
+    spawnExplosion(SHIP_X, SHIP_Y, 1.5);
+    halveUpgrades();
+    lives--;
+    sfxHit();
+    if (lives <= 0) {
+      gameOver();
+    } else {
+      resetShip();
+    }
+  }
+
+  // ============================================================
+  //  ゲームフロー
+  // ============================================================
+  function initGame() {
+    score = 0;
+    lives = 3;
+    wave = 1;
+    asteroidsDestroyed = 0;
+    nextUpgradeAt = UPGRADE_KILL_INTERVAL;
+    upgradeNotify = null;
+    zReloadMax = 0;
+    specialCooldown = 0;
+    shootCooldown = 0;
+    upgrades.fireRate = 0;
+    upgrades.spread = 0;
+    upgrades.range = 0;
+    upgrades.homing = 0;
+    upgrades.shields = 0;
+    bullets = [];
+    homingMissiles = [];
+    particles = [];
+    trails = [];
+    ufo = null;
+    upgradeItem = null;
+    ufoTimer = 600;
+    scrollX = 0;
+    scrollY = 0;
+    worldAngle = 0;
+    resetShip();
+    spawnWaveAsteroids();
+  }
+
+  function startGame() {
+    if (state === 'playing') return;
+    initAudio();
+    initGame();
+    state = 'playing';
+    document.getElementById('start-screen').classList.add('hidden');
+    document.getElementById('gameover-screen').classList.add('hidden');
+    document.getElementById('pause-screen').classList.add('hidden');
+    canvas.focus();
+    startBGM();
+  }
+
+  function gameOver() {
+    state = 'gameover';
+    stopBGM();
+    if (score > hiScore) {
+      hiScore = score;
+      try { localStorage.setItem('asteroids_hiscore', String(hiScore)); } catch (e) {}
+    }
+    document.getElementById('final-score').textContent = score;
+    document.getElementById('final-hiscore').textContent = hiScore;
+    document.getElementById('final-wave').textContent = wave;
+    document.getElementById('gameover-screen').classList.remove('hidden');
+  }
+
+  function togglePause() {
+    if (state === 'playing') {
+      state = 'paused';
+      document.getElementById('pause-screen').classList.remove('hidden');
+    } else if (state === 'paused') {
+      state = 'playing';
+      document.getElementById('pause-screen').classList.add('hidden');
+    }
+  }
+
+  // UI イベント
+  document.getElementById('btn-start').addEventListener('click', startGame);
+  document.getElementById('btn-restart').addEventListener('click', startGame);
+  document.getElementById('hi-score-start').textContent = 'HI-SCORE: ' + hiScore;
+  canvas.addEventListener('click', () => canvas.focus());
+  canvas.setAttribute('tabindex', '0');
+
+  // ============================================================
+  //  更新ロジック
+  // ============================================================
+  function updateTitleDemo() {
+    if (!ship || !asteroids) return;
+    ship.thrusting = Math.sin(Date.now() / 300) > 0.6;
+    rotateWorld(Math.sin(Date.now() / 2500) * 0.002);
+    const demoWy = ship.thrusting ? 0.4 : 0.1;
+    scrollY += demoWy;
+    for (const ast of asteroids) {
+      ast.x += ast.vx;
+      ast.y += ast.vy + demoWy;
+      ast.rot += ast.rotSpeed;
+      wrap(ast);
+    }
+    for (let i = trails.length - 1; i >= 0; i--) {
+      trails[i].life--;
+      if (trails[i].life <= 0) trails.splice(i, 1);
+    }
+  }
+
+  function update() {
+    if (state === 'start') {
+      updateTitleDemo();
+      return;
+    }
+    if (state !== 'playing') return;
+
+    // クールダウン
+    if (shootCooldown > 0) shootCooldown--;
+    if (specialCooldown > 0) specialCooldown--;
+    if (invincibleTimer > 0) invincibleTimer--;
+    if (shakeTimer > 0) shakeTimer--;
+    if (waveClearTimer > 0) { waveClearTimer--; return; }
+
+    // 自機は常に上向き固定 — ←→で空間回転、↑前進、↓バック
+    const thrustPower = 0.15;
+    const backPower = 0.12;
+    const friction = 0.98;
+    ship.thrusting = false;
+    ship.backing = false;
+
+    if (keys.left)  rotateWorld(ROT_SPEED);
+    if (keys.right) rotateWorld(-ROT_SPEED);
+
+    if (keys.up || keys.thrust) {
+      ship.worldVy += thrustPower;
+      ship.thrusting = true;
+    }
+    if (keys.down) {
+      ship.worldVy -= backPower;
+      ship.thrusting = true;
+      if (!(keys.up || keys.thrust)) ship.backing = true;
+    }
+
+    ship.worldVx *= friction;
+    ship.worldVy *= friction;
+
+    const wx = ship.worldVx;
+    const wy = ship.worldVy;
+
+    if (keys.shoot) fireBullets();
+    if (keys.special) fireHomingMissiles();
+
+    if (Math.hypot(wx, wy) > 0.3) {
+      const trailY = ship.backing ? SHIP_Y - 14 : SHIP_Y + 14;
+      addTrail(SHIP_X, trailY, ship.backing ? 'rgba(255,120,0,0.4)' : 'rgba(0,170,255,0.4)');
+    }
+
+    // シールド更新
+    updateShields();
+
+    // 弾丸更新（敵弾は空間スクロールにも追従）
+    for (let i = bullets.length - 1; i >= 0; i--) {
+      const b = bullets[i];
+      if (b.type === 'enemy') {
+        b.x += b.vx + wx;
+        b.y += b.vy + wy;
+      } else {
+        b.x += b.vx;
+        b.y += b.vy;
+      }
+      b.life--;
+      wrap(b);
+      addTrail(b.x, b.y, b.type === 'pulse' ? 'rgba(0,255,0,0.5)' : 'rgba(255,255,255,0.6)', 5);
+      if (b.life <= 0) { bullets.splice(i, 1); continue; }
+
+      let bulletHitAst = false;
+      for (let j = asteroids.length - 1; j >= 0; j--) {
+        if (circleHit(b, asteroids[j], b.r || 2, asteroids[j].r * 0.8)) {
+          destroyAsteroid(j);
+          bullets.splice(i, 1);
+          bulletHitAst = true;
+          break;
+        }
+      }
+      if (bulletHitAst) continue;
+      // UFOへの命中（プレイヤー弾のみ）
+      if (ufo && b.type !== 'enemy' && circleHit(b, ufo, b.r || 2, ufo.r)) {
+        spawnExplosion(ufo.x, ufo.y, 1.2);
+        score += 200;
+        ufo = null;
+        bullets.splice(i, 1);
+      }
+    }
+
+    // ホーミングミサイル（隕石・UFOを命中まで追尾）
+    for (let i = homingMissiles.length - 1; i >= 0; i--) {
+      const m = homingMissiles[i];
+      if (!isValidHomingTarget(m)) {
+        const tgt = findNearestHomingTarget(m);
+        if (tgt) {
+          m.target = tgt.obj;
+          m.targetType = tgt.type;
+        } else {
+          m.target = null;
+          m.targetType = null;
+        }
+      }
+      if (m.target) {
+        const dx = m.target.x - m.x, dy = m.target.y - m.y;
+        const targetAngle = Math.atan2(dy, dx);
+        const curAngle = Math.atan2(m.vy, m.vx);
+        let diff = targetAngle - curAngle;
+        while (diff > Math.PI) diff -= TAU;
+        while (diff < -Math.PI) diff += TAU;
+        const newAngle = curAngle + clamp(diff, -m.turnRate * 2.5, m.turnRate * 2.5);
+        m.vx = Math.cos(newAngle) * m.speed;
+        m.vy = Math.sin(newAngle) * m.speed;
+      }
+      m.x += m.vx;
+      m.y += m.vy;
+      wrap(m);
+      addTrail(m.x, m.y, m.targetType === 'ufo' ? 'rgba(255,200,0,0.7)' : 'rgba(0,255,100,0.7)', 8);
+
+      let hit = false;
+      if (m.targetType === 'ufo' && ufo && circleHit(m, ufo, 3, ufo.r)) {
+        spawnExplosion(ufo.x, ufo.y, 1.2);
+        score += 200;
+        ufo = null;
+        homingMissiles.splice(i, 1);
+        hit = true;
+      }
+      if (hit) continue;
+
+      for (let j = asteroids.length - 1; j >= 0; j--) {
+        if (circleHit(m, asteroids[j], 3, asteroids[j].r * 0.75)) {
+          destroyAsteroid(j);
+          spawnExplosion(m.x, m.y, 0.6);
+          homingMissiles.splice(i, 1);
+          hit = true;
+          break;
+        }
+      }
+      if (hit) continue;
+
+      if (asteroids.length === 0 && !ufo) {
+        homingMissiles.splice(i, 1);
+      }
+    }
+
+    // 隕石更新（自機速度＋固有速度で空間が流れる）
+    for (const ast of asteroids) {
+      ast.x += ast.vx + wx;
+      ast.y += ast.vy + wy;
+      ast.rot += ast.rotSpeed;
+      wrap(ast);
+
+      if (circleHit(shipPos(), ast, 8, ast.r * 0.85)) {
+        killShip();
+      }
+    }
+
+    // シールドと隕石
+    for (const s of shields) {
+      for (let j = asteroids.length - 1; j >= 0; j--) {
+        if (circleHit(s, asteroids[j], s.r, asteroids[j].r * 0.8)) {
+          destroyAsteroid(j);
+          spawnParticles(s.x, s.y, 6, '#0ff', 2);
+        }
+      }
+    }
+
+    // UFO
+    ufoTimer--;
+    if (ufoTimer <= 0 && !ufo) {
+      spawnUFO();
+      ufoTimer = rand(800, 1400) - wave * 30;
+    }
+
+    if (ufo) {
+      ufo.power = getUfoPower();
+      ufo.x += ufo.vx + wx;
+      ufo.y += ufo.vy + wy + Math.sin(ufo.wobble) * 0.3;
+      ufo.wobble += 0.05;
+      separateUfoFromAsteroids();
+      ufo.shootTimer--;
+
+      if (ufo.shootTimer <= 0) {
+        ufo.shootTimer = rand(85, 150) / Math.max(ufo.power, 0.5);
+        fireUfoShots();
+      }
+
+      if (circleHit(shipPos(), ufo, 8, ufo.r)) killShip();
+
+      if (ufo.x < -60 || ufo.x > W + 60) ufo = null;
+    }
+
+    // 敵弾 vs プレイヤー（自機は常に中央）
+    for (let i = bullets.length - 1; i >= 0; i--) {
+      if (bullets[i].type === 'enemy' && circleHit(bullets[i], shipPos(), 3, 8)) {
+        killShip();
+        bullets.splice(i, 1);
+      }
+    }
+
+    // アップグレードアイテム（空間と一緒に流れる）
+    if (upgradeItem) {
+      upgradeItem.x += wx;
+      upgradeItem.y += wy;
+      wrap(upgradeItem);
+      upgradeItem.pulse += 0.08;
+      upgradeItem.life--;
+      if (upgradeItem.life <= 0) {
+        upgradeItem = null;
+      } else if (circleHit(shipPos(), upgradeItem, 12, upgradeItem.r)) {
+        upgradeItem = null;
+        applyRandomUpgrade();
+      }
+    }
+
+    if (upgradeNotify) {
+      upgradeNotify.timer--;
+      if (upgradeNotify.timer <= 0) upgradeNotify = null;
+    }
+
+    // 星屑スクロール累積
+    scrollX += wx;
+    scrollY += wy;
+
+    // ウェーブクリア
+    if (asteroids.length === 0 && !upgradeItem) {
+      wave++;
+      waveClearTimer = 120;
+      spawnWaveAsteroids();
+      resetShip();
+      invincibleTimer = 180;
+    }
+
+    // パーティクル（空間スクロールに追従）
+    for (let i = particles.length - 1; i >= 0; i--) {
+      const p = particles[i];
+      p.x += p.vx + wx;
+      p.y += p.vy + wy;
+      p.vx *= 0.96;
+      p.vy *= 0.96;
+      p.life--;
+      if (p.life <= 0) particles.splice(i, 1);
+    }
+
+    // 軌跡フェード
+    for (let i = trails.length - 1; i >= 0; i--) {
+      trails[i].life--;
+      if (trails[i].life <= 0) trails.splice(i, 1);
+    }
+  }
+
+  // ============================================================
+  //  描画
+  // ============================================================
+  function drawShip(s, forceVisible = false) {
+    ctx.save();
+    if (!forceVisible && invincibleTimer > 0 && Math.floor(invincibleTimer / 6) % 2 === 0) {
+      ctx.globalAlpha = 0.35;
+    }
+    // 自機は常に画面中央・常に上向き（回転しない）
+    ctx.translate(SHIP_X, SHIP_Y);
+
+    // スラスター炎（前進＝船尾、バック＝船首）
+    if (s.thrusting) {
+      if (s.backing) {
+        ctx.strokeStyle = '#f80';
+        ctx.shadowColor = '#f80';
+        ctx.shadowBlur = 8;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(0, -10);
+        ctx.lineTo(rand(-3, 3), -18 - rand(0, 5));
+        ctx.stroke();
+      } else {
+        ctx.strokeStyle = '#0af';
+        ctx.shadowColor = '#0af';
+        ctx.shadowBlur = 8;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(0, 10);
+        ctx.lineTo(rand(-3, 3), 18 + rand(0, 5));
+        ctx.stroke();
+      }
+      ctx.shadowBlur = 0;
+    }
+
+    // 船体（三角形、デフォルトで上向き）
+    ctx.fillStyle = 'rgba(0, 255, 100, 0.25)';
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 2.5;
+    ctx.shadowColor = '#0f0';
+    ctx.shadowBlur = 10;
+    ctx.beginPath();
+    ctx.moveTo(0, -14);
+    ctx.lineTo(-10, 12);
+    ctx.lineTo(10, 12);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    // コックピット
+    ctx.strokeStyle = '#0af';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, -4);
+    ctx.lineTo(0, 6);
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+
+  function drawAsteroid(ast) {
+    ctx.save();
+    ctx.translate(ast.x, ast.y);
+    ctx.rotate(ast.rot);
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 1.5;
+    ctx.shadowColor = '#0af';
+    ctx.shadowBlur = 4;
+    ctx.beginPath();
+    for (let i = 0; i < ast.verts.length; i++) {
+      const v = ast.verts[i];
+      const px = Math.cos(v.angle) * ast.r * v.dist;
+      const py = Math.sin(v.angle) * ast.r * v.dist;
+      if (i === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.restore();
+  }
+
+  function drawUFO(u) {
+    ctx.save();
+    ctx.translate(u.x, u.y);
+    ctx.strokeStyle = '#0f0';
+    ctx.lineWidth = 1.5;
+    ctx.shadowColor = '#0f0';
+    ctx.shadowBlur = 8;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 18, 8, 0, 0, TAU);
+    ctx.moveTo(-8, -2);
+    ctx.lineTo(0, -10);
+    ctx.lineTo(8, -2);
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.restore();
+  }
+
+  function drawUpgradeItem(item) {
+    const pulse = Math.sin(item.pulse) * 4;
+    ctx.save();
+    ctx.translate(item.x, item.y);
+    ctx.strokeStyle = '#ff0';
+    ctx.lineWidth = 2;
+    ctx.shadowColor = '#ff0';
+    ctx.shadowBlur = 12 + pulse;
+    const r = item.r + pulse;
+    ctx.beginPath();
+    ctx.moveTo(0, -r);
+    ctx.lineTo(r, 0);
+    ctx.lineTo(0, r);
+    ctx.lineTo(-r, 0);
+    ctx.closePath();
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,0,0.15)';
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.restore();
+  }
+
+  function drawHUD() {
+    ctx.save();
+    ctx.font = '10px "Press Start 2P", monospace';
+
+    // スコア
+    ctx.fillStyle = '#fff';
+    ctx.shadowColor = '#fff';
+    ctx.shadowBlur = 4;
+    ctx.fillText('SCORE', 16, 24);
+    ctx.fillStyle = '#0ff';
+    ctx.fillText(String(score).padStart(6, '0'), 16, 40);
+
+    // ハイスコア
+    ctx.fillStyle = '#fff';
+    ctx.fillText('HI', W - 120, 24);
+    ctx.fillStyle = '#ff0';
+    ctx.fillText(String(hiScore).padStart(6, '0'), W - 120, 40);
+
+    // 残機
+    ctx.fillStyle = '#fff';
+    ctx.fillText('SHIPS', 16, H - 50);
+    for (let i = 0; i < lives; i++) {
+      ctx.save();
+      ctx.translate(20 + i * 22, H - 28);
+      ctx.scale(0.7, 0.7);
+      ctx.strokeStyle = '#0f0';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(0, -8);
+      ctx.lineTo(-5, 6);
+      ctx.lineTo(5, 6);
+      ctx.closePath();
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // ウェーブ
+    ctx.fillStyle = '#fff';
+    ctx.fillText('WAVE', W / 2 - 30, 24);
+    ctx.fillStyle = '#0f0';
+    ctx.fillText(String(wave), W / 2 - 10, 40);
+
+    // 破壊カウント（次のアップグレードまで）
+    const remaining = nextUpgradeAt - asteroidsDestroyed;
+    ctx.fillStyle = '#888';
+    ctx.font = '8px "Press Start 2P", monospace';
+    ctx.fillText(`NEXT UP: ${remaining}`, W / 2 - 55, H - 16);
+    ctx.fillStyle = '#666';
+    ctx.fillText(`DROP: ${Math.round(getUpgradeDropChance() * 100)}%`, W / 2 - 42, H - 4);
+
+    // アップグレードレベル
+    ctx.font = '7px "Press Start 2P", monospace';
+    const hudY = H - 50;
+    const labels = [
+      { key: 'fireRate', label: 'FR', color: '#fff' },
+      { key: 'spread', label: 'SP', color: '#0af' },
+      { key: 'range', label: 'RG', color: '#ff0' },
+      { key: 'homing', label: 'HM', color: '#0f0' },
+      { key: 'shields', label: 'SH', color: '#0ff' }
+    ];
+    labels.forEach((l, i) => {
+      const x = W - 210 + i * 32;
+      ctx.fillStyle = '#666';
+      ctx.fillText(l.label, x, hudY);
+      ctx.fillStyle = l.color;
+      for (let j = 0; j < upgrades[l.key]; j++) {
+        ctx.fillRect(x + j * 8, hudY + 6, 6, 6);
+      }
+    });
+
+    // Zリロードゲージ（ホーミング）
+    {
+      const maxCd = zReloadMax || HOMING_RELOAD;
+      const progress = maxCd > 0 ? 1 - specialCooldown / maxCd : 1;
+      const barW = 64, barH = 7;
+      const bx = SHIP_X - barW / 2;
+      const by = SHIP_Y + 38;
+      ctx.font = '7px "Press Start 2P", Courier New, monospace';
+      ctx.fillStyle = '#888';
+      ctx.fillText('Z', bx - 14, by + 6);
+      ctx.fillStyle = 'rgba(30,30,30,0.8)';
+      ctx.fillRect(bx, by, barW, barH);
+      const fillW = barW * clamp(progress, 0, 1);
+      ctx.fillStyle = progress >= 1 ? '#0f0' : '#088';
+      ctx.shadowColor = progress >= 1 ? '#0f0' : '#0af';
+      ctx.shadowBlur = progress >= 1 ? 6 : 2;
+      ctx.fillRect(bx, by, fillW, barH);
+      ctx.strokeStyle = '#0af';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(bx, by, barW, barH);
+      ctx.shadowBlur = 0;
+      if (specialCooldown > 0) {
+        ctx.fillStyle = '#0af';
+        ctx.textAlign = 'center';
+        ctx.fillText('RELOAD', SHIP_X, by - 4);
+        ctx.textAlign = 'left';
+      }
+    }
+
+    ctx.shadowBlur = 0;
+    ctx.restore();
+  }
+
+  function draw() {
+    // 画面シェイク
+    ctx.save();
+    if (shakeTimer > 0) {
+      ctx.translate(rand(-3, 3), rand(-3, 3));
+    }
+
+    // 背景
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, W, H);
+
+    // 星屑（空間スクロール・回転に連動）
+    ctx.save();
+    ctx.translate(SHIP_X, SHIP_Y);
+    ctx.rotate(worldAngle);
+    ctx.translate(-SHIP_X, -SHIP_Y);
+    ctx.fillStyle = 'rgba(255,255,255,0.35)';
+    for (let i = 0; i < 80; i++) {
+      const parallax = 0.3 + (i % 5) * 0.12;
+      let sx = (i * 137.5 - scrollX * parallax) % W;
+      let sy = (i * 97.3 - scrollY * parallax) % H;
+      if (sx < 0) sx += W;
+      if (sy < 0) sy += H;
+      const sz = (i % 3 === 0) ? 2 : 1;
+      ctx.globalAlpha = 0.2 + (i % 4) * 0.15;
+      ctx.fillRect(sx, sy, sz, sz);
+    }
+    ctx.restore();
+    ctx.globalAlpha = 1;
+
+    // 軌跡
+    for (const t of trails) {
+      const alpha = t.life / t.maxLife;
+      ctx.globalAlpha = alpha * 0.5;
+      ctx.fillStyle = t.color;
+      ctx.fillRect(t.x - 1, t.y - 1, 2, 2);
+    }
+    ctx.globalAlpha = 1;
+
+    // ゲームオブジェクト（タイトル画面でも表示）
+    if (asteroids) {
+      for (const ast of asteroids) drawAsteroid(ast);
+    }
+    if (ufo) drawUFO(ufo);
+    if (upgradeItem) drawUpgradeItem(upgradeItem);
+
+    // 弾丸
+    for (const b of bullets) {
+      ctx.fillStyle = b.type === 'enemy' ? '#f44' : b.type === 'pulse' ? '#0f0' : '#fff';
+      ctx.shadowColor = ctx.fillStyle;
+      ctx.shadowBlur = 4;
+      const size = b.r || 2;
+      ctx.fillRect(b.x - size / 2, b.y - size / 2, size, size);
+    }
+
+    // ホーミングミサイル
+    for (const m of homingMissiles) {
+      ctx.strokeStyle = '#0f0';
+      ctx.shadowColor = '#0f0';
+      ctx.shadowBlur = 6;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(m.x, m.y);
+      ctx.lineTo(m.x - m.vx * 2, m.y - m.vy * 2);
+      ctx.stroke();
+    }
+
+    // シールド
+    for (const s of shields) {
+      ctx.strokeStyle = '#0ff';
+      ctx.shadowColor = '#0ff';
+      ctx.shadowBlur = 8;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, s.r, 0, TAU);
+      ctx.stroke();
+    }
+
+    ctx.shadowBlur = 0;
+
+    // パーティクル
+    for (const p of particles) {
+      const alpha = p.life / p.maxLife;
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = p.color;
+      ctx.fillRect(p.x, p.y, p.size, p.size);
+    }
+    ctx.globalAlpha = 1;
+
+    if (ship) drawShip(ship, state === 'start');
+
+    if (state === 'playing' || state === 'paused') {
+      drawHUD();
+    }
+
+    if (upgradeNotify && upgradeNotify.timer > 0) {
+      const alpha = Math.min(1, upgradeNotify.timer / 30);
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.font = '12px "Press Start 2P", Courier New, monospace';
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#ff0';
+      ctx.shadowColor = '#ff0';
+      ctx.shadowBlur = 12;
+      ctx.fillText('UPGRADE!', SHIP_X, 80);
+      ctx.font = '9px "Press Start 2P", Courier New, monospace';
+      ctx.fillStyle = '#0ff';
+      ctx.shadowColor = '#0ff';
+      ctx.fillText(upgradeNotify.text, SHIP_X, 104);
+      if (upgradeNotify.sub) {
+        ctx.font = '7px "Press Start 2P", Courier New, monospace';
+        ctx.fillStyle = '#aaa';
+        ctx.shadowBlur = 0;
+        ctx.fillText(upgradeNotify.sub, SHIP_X, 122);
+      }
+      ctx.textAlign = 'left';
+      ctx.shadowBlur = 0;
+      ctx.globalAlpha = 1;
+      ctx.restore();
+    }
+
+    // 移動中の空間速度インジケーター
+    if (state === 'playing' && ship && Math.hypot(ship.worldVx, ship.worldVy) > 0.5) {
+      ctx.font = '7px "Press Start 2P", Courier New, monospace';
+      ctx.fillStyle = 'rgba(0,170,255,0.6)';
+      ctx.textAlign = 'center';
+      ctx.fillText('>> SPACE FLOW <<', SHIP_X, SHIP_Y + 32);
+      ctx.textAlign = 'left';
+    }
+
+    // ウェーブクリア表示
+    if (state === 'playing' && waveClearTimer > 60) {
+      ctx.font = '16px "Press Start 2P", monospace';
+      ctx.fillStyle = '#0f0';
+      ctx.shadowColor = '#0f0';
+      ctx.shadowBlur = 10;
+      ctx.textAlign = 'center';
+      ctx.fillText(`WAVE ${wave}`, W / 2, H / 2);
+      ctx.textAlign = 'left';
+      ctx.shadowBlur = 0;
+    }
+
+    ctx.restore();
+  }
+
+  // ============================================================
+  //  メインループ
+  // ============================================================
+  function loop() {
+    try {
+      update();
+      draw();
+    } catch (err) {
+      ctx.fillStyle = '#f00';
+      ctx.font = '12px monospace';
+      ctx.fillText('ERROR: ' + err.message, 20, 40);
+      console.error(err);
+    }
+    requestAnimationFrame(loop);
+  }
+
+  resize();
+  initTitleDemo();
+  canvas.focus();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
