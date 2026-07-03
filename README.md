@@ -9,6 +9,7 @@
 |--------|----------|------|
 | **ASTEROIDS** | [`asteroids.html`](asteroids.html) | ベクター風 Asteroids クローン。パワーアップ・UFO・ホーミングミサイル付き |
 | **Missile Command** | [`missile-command.html`](missile-command.html) | ミサイルコマンド風ディフェンスゲーム |
+| **F1 RACING** | [`f1-racing.html`](f1-racing.html) | F1トップダウンレース。オーバル / GPコース、4周、ゴースト走行・記録保存 |
 
 ## 遊び方
 
@@ -77,6 +78,7 @@ xdg-open asteroids.html
 ├── index.html           # ゲーム選択メニュー（GitHub Pages 用）
 ├── asteroids.html       # ASTEROIDS
 ├── missile-command.html # Missile Command
+├── f1-racing.html       # F1 RACING
 ├── README.md
 └── .gitignore
 ```

@@ -1,0 +1,2137 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>F1 Race</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #111;
+      overflow: hidden;
+      font-family: 'Segoe UI', sans-serif;
+      color: #fff;
+      user-select: none;
+    }
+    canvas { display: block; }
+    #overlay {
+      position: fixed; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(0,0,0,0.75);
+      z-index: 10;
+    }
+    #overlay.hidden { display: none; }
+    .panel {
+      background: linear-gradient(135deg, #1a1a2e, #16213e);
+      border: 2px solid #e63946;
+      border-radius: 12px;
+      padding: 2rem 2.5rem;
+      text-align: center;
+      box-shadow: 0 0 40px rgba(230,57,70,0.3);
+      max-width: 420px;
+    }
+    .panel h1 {
+      font-size: 1.8rem;
+      color: #e63946;
+      margin-bottom: 0.5rem;
+      letter-spacing: 2px;
+    }
+    .panel p { color: #aaa; font-size: 0.85rem; line-height: 1.6; margin-bottom: 1.2rem; }
+    .panel button {
+      display: block; width: 100%;
+      margin: 0.5rem 0;
+      padding: 0.75rem;
+      font-size: 1rem;
+      background: #e63946;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .panel button:hover { background: #ff4d5a; }
+    .panel button.secondary { background: #333; }
+    .panel button.secondary:hover { background: #444; }
+    .controls-hint {
+      margin-top: 1rem;
+      font-size: 0.75rem;
+      color: #666;
+      text-align: left;
+      line-height: 1.8;
+    }
+    #hud {
+      position: fixed; inset: 0;
+      pointer-events: none;
+      z-index: 5;
+    }
+    .hud-top {
+      display: flex; justify-content: space-between;
+      padding: 12px 20px;
+    }
+    .hud-box {
+      background: rgba(0,0,0,0.6);
+      border-left: 3px solid #e63946;
+      padding: 8px 14px;
+      font-size: 0.85rem;
+      line-height: 1.5;
+    }
+    .hud-box .big { font-size: 1.4rem; font-weight: bold; color: #fff; }
+    .hud-box .record-line { font-size: 0.75rem; color: #bbb; margin-top: 2px; }
+    .hud-box .record-line span { color: #ffd166; }
+    .records-box {
+      background: rgba(0,0,0,0.35);
+      border: 1px solid #444;
+      border-radius: 8px;
+      padding: 0.75rem 1rem;
+      margin-bottom: 1.2rem;
+      text-align: left;
+      font-size: 0.8rem;
+      line-height: 1.9;
+      color: #aaa;
+    }
+    .records-box span { color: #ffd166; font-weight: bold; }
+    #menuPanel, #settingsPanel { max-width: 440px; text-align: left; }
+    #menuPanel h1, #settingsPanel h1 { text-align: center; }
+    #menuPanel > p#menuDesc, #settingsPanel > p { text-align: center; }
+    .course-picker-label {
+      font-size: 0.85rem;
+      color: #aaa;
+      margin: 1rem 0 0.4rem;
+    }
+    .course-picker { display: flex; flex-direction: column; gap: 0.55rem; margin-bottom: 0.5rem; }
+    .course-option {
+      background: rgba(0,0,0,0.35);
+      border: 2px solid #444;
+      border-radius: 8px;
+      padding: 0.7rem 0.9rem;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+    }
+    .course-option:hover { border-color: #666; background: rgba(0,0,0,0.45); }
+    .course-option.selected {
+      border-color: #e63946;
+      background: rgba(230,57,70,0.12);
+      box-shadow: 0 0 12px rgba(230,57,70,0.2);
+    }
+    .course-option-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.35rem;
+    }
+    .course-name { font-weight: bold; color: #fff; font-size: 0.95rem; }
+    .course-badges { display: flex; gap: 0.35rem; align-items: center; }
+    .course-badge {
+      font-size: 0.68rem;
+      padding: 2px 7px;
+      border-radius: 4px;
+      background: #333;
+      color: #aaa;
+    }
+    .course-badge.std { background: #2a4a6e; color: #8ec8ff; }
+    .course-badge.active { background: #e63946; color: #fff; display: none; }
+    .course-option.selected .course-badge.active { display: inline; }
+    .course-records {
+      font-size: 0.78rem;
+      color: #aaa;
+      line-height: 1.65;
+    }
+    .course-records span { color: #ffd166; font-weight: bold; }
+    .course-delete-btn {
+      margin-top: 0.45rem;
+      width: auto;
+      display: inline-block;
+      padding: 0.3rem 0.65rem;
+      font-size: 0.72rem;
+      background: #333;
+    }
+    .course-delete-btn:hover { background: #555; }
+    .record-manage-row {
+      background: rgba(0,0,0,0.35);
+      border: 1px solid #444;
+      border-radius: 8px;
+      padding: 0.7rem 0.9rem;
+      margin-bottom: 0.55rem;
+    }
+    .record-manage-head {
+      font-weight: bold;
+      color: #fff;
+      font-size: 0.9rem;
+      margin-bottom: 0.35rem;
+    }
+    .settings-note { color: #888; font-size: 0.78rem; text-align: center; margin: 0.5rem 0 1rem; }
+    .hud-center {
+      position: fixed; top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 3rem; font-weight: bold;
+      color: #fff;
+      text-shadow: 0 0 20px #e63946;
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+    .hud-center.show { opacity: 1; }
+    #minimap {
+      position: fixed; top: 12px; right: 12px;
+      border: 2px solid #555;
+      border-radius: 4px;
+      background: rgba(0,0,0,0.5);
+    }
+  </style>
+</head>
+<body>
+  <canvas id="game"></canvas>
+  <canvas id="minimap" width="140" height="100"></canvas>
+
+  <div id="hud">
+    <div class="hud-top">
+      <div class="hud-box">
+        <div>SPEED</div>
+        <div class="big" id="speedDisp">0</div>
+        <div>km/h</div>
+      </div>
+      <div class="hud-box" style="text-align:right">
+        <div>LAP <span id="lapDisp">1</span>/<span id="totalLaps">4</span></div>
+        <div class="big" id="timeDisp">0:00.000</div>
+        <div>BEST <span id="bestDisp">--</span></div>
+        <div class="record-line">LAP REC <span id="hudLapRecord">--</span></div>
+        <div class="record-line">TOTAL REC <span id="hudCourseRecord">--</span></div>
+      </div>
+    </div>
+    <div class="hud-center" id="countdown"></div>
+  </div>
+
+  <div id="overlay">
+    <div class="panel" id="menuPanel">
+      <h1>F1 RACE</h1>
+      <p id="menuDesc">オーバルコースを4周！<br>高速ストレートとターンを攻略せよ</p>
+      <div class="course-picker-label">コース（クリックで選択）</div>
+      <div class="course-picker" id="menuCoursePicker">
+        <div class="course-option" data-course="oval">
+          <div class="course-option-head">
+            <span class="course-name">オーバル</span>
+            <span class="course-badges">
+              <span class="course-badge active">選択中</span>
+            </span>
+          </div>
+          <div class="course-records">
+            <div>ベストラップ <span class="rec-lap">--</span></div>
+            <div>総タイム <span class="rec-total">--</span></div>
+          </div>
+        </div>
+        <div class="course-option" data-course="gp">
+          <div class="course-option-head">
+            <span class="course-name">GPコース</span>
+            <span class="course-badges">
+              <span class="course-badge std">標準</span>
+              <span class="course-badge active">選択中</span>
+            </span>
+          </div>
+          <div class="course-records">
+            <div>ベストラップ <span class="rec-lap">--</span></div>
+            <div>総タイム <span class="rec-total">--</span></div>
+          </div>
+        </div>
+      </div>
+      <p class="settings-note" style="margin-top:0">周回数: 4周（固定）</p>
+      <button id="btnStart">レース開始</button>
+      <button id="btnSettings" class="secondary">設定</button>
+      <div class="controls-hint">
+        ↑/W アクセル　↓/S ブレーキ<br>
+        ←→/A D ステアリング　Space ハンドブレーキ<br>
+        P ポーズ
+      </div>
+    </div>
+    <div class="panel" id="settingsPanel" style="display:none">
+      <h1>設定</h1>
+      <p>音量: <input type="range" id="volSlider" min="0" max="100" value="70"></p>
+      <div class="course-picker-label">記録管理</div>
+      <div id="settingsRecords">
+        <div class="record-manage-row" data-course="oval">
+          <div class="record-manage-head">オーバル</div>
+          <div class="course-records">
+            <div>ベストラップ <span class="rec-lap">--</span></div>
+            <div>総タイム <span class="rec-total">--</span></div>
+          </div>
+          <button type="button" class="course-delete-btn secondary" data-delete="oval">記録削除</button>
+        </div>
+        <div class="record-manage-row" data-course="gp">
+          <div class="record-manage-head">GPコース（標準）</div>
+          <div class="course-records">
+            <div>ベストラップ <span class="rec-lap">--</span></div>
+            <div>総タイム <span class="rec-total">--</span></div>
+          </div>
+          <button type="button" class="course-delete-btn secondary" data-delete="gp">記録削除</button>
+        </div>
+      </div>
+      <p class="settings-note">記録・ゴースト走行は削除するまで保存されます</p>
+      <button id="btnBack">戻る</button>
+    </div>
+    <div class="panel" id="pausePanel" style="display:none">
+      <h1>PAUSED</h1>
+      <button id="btnResume">再開</button>
+      <button id="btnRestart">リスタート</button>
+      <button id="btnQuit">メニューへ</button>
+    </div>
+    <div class="panel" id="resultPanel" style="display:none">
+      <h1 id="resultTitle">FINISH!</h1>
+      <p id="resultText"></p>
+      <button id="btnAgain">もう一度</button>
+      <button id="btnMenu" class="secondary">メニューへ</button>
+    </div>
+  </div>
+
+<script>
+// ============================================================
+// F1 Oval Race — 単一HTMLファイル完結版
+// 車は画面中央固定、トラックが回転・スクロールする方式
+// ============================================================
+
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const minimap = document.getElementById('minimap');
+const mctx = minimap.getContext('2d');
+
+// --- 画面サイズ ---
+function resize() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+window.addEventListener('resize', resize);
+resize();
+
+// --- 設定 ---
+const settings = {
+  volume: 0.7,
+  totalLaps: 4,
+  courseId: 'oval'
+};
+
+// --- キー入力 ---
+const keys = {};
+window.addEventListener('keydown', e => {
+  keys[e.code] = true;
+  if (e.code === 'KeyP' && (state === 'racing' || state === 'finishing')) pauseGame();
+  if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code)) e.preventDefault();
+});
+window.addEventListener('keyup', e => { keys[e.code] = false; });
+
+// --- ゲーム状態 ---
+let state = 'menu'; // menu | countdown | racing | finishing | pause | result
+let countdownVal = 0;
+let raceTime = 0;
+const FINISH_OUTRO_SEC = 1.0;
+let finishOutroTimer = 0;
+// --- クッキーで設定・レコード保存 ---
+const RECORD_COOKIE = 'f1race_records';
+const SETTINGS_COOKIE = 'f1race_settings';
+
+function getCookie(name) {
+  const m = document.cookie.match(new RegExp('(?:^|; )' + encodeURIComponent(name) + '=([^;]*)'));
+  return m ? decodeURIComponent(m[1]) : null;
+}
+
+function setCookie(name, value, days = 365) {
+  const exp = new Date(Date.now() + days * 864e5).toUTCString();
+  document.cookie = `${encodeURIComponent(name)}=${encodeURIComponent(value)}; expires=${exp}; path=/; SameSite=Lax`;
+}
+
+function emptyCourseRecords() {
+  return { lap: null, course: null };
+}
+
+function loadRecords() {
+  const empty = { gp: emptyCourseRecords(), oval: emptyCourseRecords() };
+  try {
+    const raw = getCookie(RECORD_COOKIE) || getCookie('f1oval_records');
+    if (raw) {
+      const d = JSON.parse(raw);
+      if (d.gp || d.oval) {
+        return {
+          gp: { lap: d.gp?.lap ?? null, course: d.gp?.course ?? null },
+          oval: { lap: d.oval?.lap ?? null, course: d.oval?.course ?? null }
+        };
+      }
+      empty.gp = { lap: d.lap ?? null, course: d.course ?? null };
+    }
+  } catch (e) { /* ignore */ }
+  return empty;
+}
+
+let records = loadRecords();
+
+function getActiveRecords() {
+  return records[settings.courseId] || emptyCourseRecords();
+}
+
+function saveRecords() {
+  setCookie(RECORD_COOKIE, JSON.stringify(records), 3650);
+}
+
+function trySaveLapRecord(time) {
+  const cr = getActiveRecords();
+  if (cr.lap === null || time < cr.lap) {
+    cr.lap = time;
+    saveRecords();
+    updateRecordDisplays();
+    return true;
+  }
+  return false;
+}
+
+function trySaveCourseRecord(time) {
+  const cr = getActiveRecords();
+  if (cr.course === null || time < cr.course) {
+    cr.course = time;
+    saveRecords();
+    updateRecordDisplays();
+    return true;
+  }
+  return false;
+}
+
+function updateRecordDisplays() {
+  const cr = getActiveRecords();
+  const lapText = cr.lap !== null ? formatTime(cr.lap) : '--';
+  const courseText = cr.course !== null ? formatTime(cr.course) : '--';
+  const hudLap = document.getElementById('hudLapRecord');
+  const hudCourse = document.getElementById('hudCourseRecord');
+  if (hudLap) hudLap.textContent = lapText;
+  if (hudCourse) hudCourse.textContent = courseText;
+  updateMenuCourseUI();
+  updateSettingsRecordsUI();
+}
+
+function deleteCourseRecords(courseId) {
+  const def = COURSE_DEFS[courseId];
+  if (!def) return;
+  const cr = records[courseId] || emptyCourseRecords();
+  const hasGhost = hasGhostData(courseId);
+  if (cr.lap === null && cr.course === null && !hasGhost) return;
+  if (!confirm(def.label + 'の記録とゴースト走行データを削除しますか？\n（削除するまでクッキーに保存されています）')) return;
+  records[courseId] = emptyCourseRecords();
+  deleteGhostData(courseId);
+  if (courseId === settings.courseId) ghostData = null;
+  saveRecords();
+  updateRecordDisplays();
+}
+
+function fillRecordElements(root, courseId) {
+  const cr = records[courseId] || emptyCourseRecords();
+  const lapEl = root.querySelector('.rec-lap');
+  const totalEl = root.querySelector('.rec-total');
+  if (lapEl) lapEl.textContent = cr.lap !== null ? formatTime(cr.lap) : '--';
+  if (totalEl) totalEl.textContent = cr.course !== null ? formatTime(cr.course) : '--';
+}
+
+function updateMenuCourseUI() {
+  document.querySelectorAll('#menuCoursePicker .course-option').forEach(el => {
+    const id = el.dataset.course;
+    el.classList.toggle('selected', id === settings.courseId);
+    fillRecordElements(el, id);
+  });
+}
+
+function updateSettingsRecordsUI() {
+  document.querySelectorAll('#settingsRecords .record-manage-row').forEach(el => {
+    fillRecordElements(el, el.dataset.course);
+  });
+}
+
+function selectCourse(courseId) {
+  if (!COURSE_DEFS[courseId] || settings.courseId === courseId) return;
+  initTrack(courseId);
+  ghostData = loadGhostData(settings.courseId);
+}
+
+function loadSettings() {
+  try {
+    const raw = getCookie(SETTINGS_COOKIE);
+    if (!raw) return;
+    const d = JSON.parse(raw);
+    if (d.courseId && COURSE_DEFS[d.courseId]) settings.courseId = d.courseId;
+    if (typeof d.volume === 'number') settings.volume = Math.max(0, Math.min(1, d.volume));
+  } catch (e) { /* ignore */ }
+}
+
+function saveSettings() {
+  setCookie(SETTINGS_COOKIE, JSON.stringify({
+    courseId: settings.courseId,
+    volume: settings.volume
+  }), 3650);
+}
+
+// --- ゴースト走行データ（コース記録の走行を保存・再生） ---
+const GHOST_SAMPLE_INTERVAL = 0.45;
+const GHOST_COOKIE_MAX_LEN = 3800;
+const GHOST_STORAGE_PREFIX = 'f1race_ghost_';
+
+function ghostCookieName(courseId) {
+  return GHOST_STORAGE_PREFIX + courseId;
+}
+
+function ghostStorageKey(courseId) {
+  return GHOST_STORAGE_PREFIX + courseId;
+}
+
+function createRaceRecorder() {
+  return { frames: [], lastSampleT: -GHOST_SAMPLE_INTERVAL };
+}
+
+function resetRaceRecorder(rec) {
+  rec.frames = [];
+  rec.lastSampleT = -GHOST_SAMPLE_INTERVAL;
+}
+
+function ghostAngle(angle) {
+  return Math.round(normAngle(angle) * 1000) / 1000;
+}
+
+function seedRaceRecorder(rec, car) {
+  resetRaceRecorder(rec);
+  rec.frames.push({
+    t: 0,
+    x: Math.round(car.x * 10) / 10,
+    y: Math.round(car.y * 10) / 10,
+    a: ghostAngle(car.angle)
+  });
+  rec.lastSampleT = 0;
+}
+
+function sampleRaceRecorder(rec, raceTime, car) {
+  if (raceTime - rec.lastSampleT < GHOST_SAMPLE_INTERVAL) return;
+  rec.lastSampleT = raceTime;
+  rec.frames.push({
+    t: Math.round(raceTime * 100) / 100,
+    x: Math.round(car.x * 10) / 10,
+    y: Math.round(car.y * 10) / 10,
+    a: ghostAngle(car.angle)
+  });
+}
+
+function recorderToGhostPayload(rec) {
+  return {
+    time: rec.frames.length ? rec.frames[rec.frames.length - 1].t : 0,
+    d: rec.frames.map(f => [
+      Math.round(f.t * 10),
+      Math.round(f.x),
+      Math.round(f.y),
+      Math.round(f.a * 1000)
+    ])
+  };
+}
+
+function parseGhostPayload(obj) {
+  if (!obj || !Array.isArray(obj.d) || !obj.d.length) return null;
+  return {
+    recordTime: obj.time || obj.d[obj.d.length - 1][0] / 10,
+    frames: obj.d.map(row => ({
+      t: row[0] / 10,
+      x: row[1],
+      y: row[2],
+      a: ghostAngle(row[3] / 1000)
+    }))
+  };
+}
+
+function thinGhostPayload(payload) {
+  const d = payload.d;
+  if (d.length <= 2) return payload;
+  const out = [d[0]];
+  for (let i = 1; i < d.length - 1; i += 2) out.push(d[i]);
+  out.push(d[d.length - 1]);
+  payload.d = out;
+  return payload;
+}
+
+function ensureGhostStartFrame(payload) {
+  if (!payload.d.length) return payload;
+  if (payload.d[0][0] > 0) {
+    const first = payload.d[0];
+    payload.d.unshift([0, first[1], first[2], first[3]]);
+  }
+  return payload;
+}
+
+function saveGhostData(courseId, rec) {
+  const payload = ensureGhostStartFrame(recorderToGhostPayload(rec));
+  try {
+    localStorage.setItem(ghostStorageKey(courseId), JSON.stringify(payload));
+  } catch (e) { /* quota */ }
+
+  const cookiePayload = ensureGhostStartFrame(JSON.parse(JSON.stringify(payload)));
+  let cookieJson = JSON.stringify(cookiePayload);
+  while (cookieJson.length > GHOST_COOKIE_MAX_LEN && cookiePayload.d.length > 12) {
+    thinGhostPayload(cookiePayload);
+    cookieJson = JSON.stringify(cookiePayload);
+  }
+  if (cookieJson.length <= GHOST_COOKIE_MAX_LEN) {
+    setCookie(ghostCookieName(courseId), cookieJson, 3650);
+  }
+  return true;
+}
+
+function loadGhostData(courseId) {
+  try {
+    const stored = localStorage.getItem(ghostStorageKey(courseId));
+    if (stored) {
+      const parsed = parseGhostPayload(JSON.parse(stored));
+      if (parsed) return parsed;
+    }
+  } catch (e) { /* ignore */ }
+  try {
+    const raw = getCookie(ghostCookieName(courseId));
+    if (!raw) return null;
+    return parseGhostPayload(JSON.parse(raw));
+  } catch (e) { /* ignore */ }
+  return null;
+}
+
+function hasGhostData(courseId) {
+  try {
+    if (localStorage.getItem(ghostStorageKey(courseId))) return true;
+  } catch (e) { /* ignore */ }
+  return !!getCookie(ghostCookieName(courseId));
+}
+
+function deleteGhostData(courseId) {
+  try { localStorage.removeItem(ghostStorageKey(courseId)); } catch (e) { /* ignore */ }
+  document.cookie = encodeURIComponent(ghostCookieName(courseId)) + '=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; SameSite=Lax';
+}
+
+function persistGhostForRecordRun(finishTime) {
+  const cr = getActiveRecords();
+  if (cr.course === null || raceRecorder.frames.length < 4) return false;
+  if (finishTime > cr.course + 0.02) return false;
+  saveGhostData(settings.courseId, raceRecorder);
+  ghostData = loadGhostData(settings.courseId);
+  return !!ghostData;
+}
+
+function getGhostPoseAt(ghost, t) {
+  if (!ghost || !ghost.frames.length) return null;
+  const frames = ghost.frames;
+  if (t <= frames[0].t) return makeGhostCar(frames[0]);
+  const last = frames[frames.length - 1];
+  if (t >= last.t) return makeGhostCar(last);
+
+  let lo = 0;
+  let hi = frames.length - 1;
+  while (lo < hi - 1) {
+    const mid = (lo + hi) >> 1;
+    if (frames[mid].t <= t) lo = mid;
+    else hi = mid;
+  }
+  const a = frames[lo];
+  const b = frames[hi];
+  const u = (t - a.t) / (b.t - a.t);
+  return makeGhostCar({
+    x: a.x + (b.x - a.x) * u,
+    y: a.y + (b.y - a.y) * u,
+    a: ghostAngle(a.a + normAngle(b.a - a.a) * u)
+  });
+}
+
+function makeGhostCar(frame) {
+  return {
+    x: frame.x,
+    y: frame.y,
+    angle: ghostAngle(frame.a),
+    speed: 0,
+    width: 24,
+    length: 52,
+    color: '#5ec8ff',
+    number: 'G',
+    isDrifting: false,
+    steer: 0,
+    steerSmoothed: 0
+  };
+}
+
+let raceRecorder = createRaceRecorder();
+let ghostData = null;
+
+// ============================================================
+// GPコース — 寸法と各コーナー出口 (全て接線連続・重なりなし)
+//
+// MAP範囲: X ∈ [LEFT, RIGHT] = [-1700, 1500]  西側拡張 (ヘアピン用)
+//          Y ∈ [TOP, BOT]   = [-600, 1850]   南端拡張 (ヘアピン南ストレート)
+// トラック幅 180m / メインコーナー R=500 / シケイン R=100 / ヘアピン R=300
+//
+// buildGPTrack(): スタート → straight(距離) → corner(角度,R) … で直列組み立て
+// straight: 現ベクトル h のまま len だけ進む (h 不変)
+// corner: 角度 da (左+ / 右−) と半径 R で弧を描き、h を da だけ回転 (180°=π でヘアピン)
+// ============================================================
+const TRACK = {
+  name: 'Grand Prix Circuit',
+  width: 180,
+  pitWidth: 95,
+  gravelWidth: 70   // アスファルト外側のダート(砂利)幅 — 内外とも同じ
+};
+
+// 図面寸法 (buildGPTrack と同期)
+const GP_LAYOUT = {
+  LEFT: -1700, RIGHT: 1500, TOP: -600, BOT: 1850,
+  mapWidth: 3200, mapHeight: 2450,
+  R: 500, R_CHI: 100, R_HP: 300,
+  SF_LEN: 2200,
+  SF_START_LEN: 2200 / 3,
+  SF_JOIN_LEN: 2200 / 3 - 500,
+  E_STRAIGHT_LEN: 700,
+  S_STRAIGHT_LEN: 1000,
+  CHI_STRAIGHT_LEN: 50,
+  HP_WEST_LEN: 100,
+  HP_STRAIGHT_LEN: 600,
+  N_STRAIGHT_LEN: 1850,
+  ANCHOR: { x: 0, y: 250 }
+};
+
+const GP_SECTIONS = [
+  { name: 'SF', sHint: 0.01 },
+  { name: 'T1', sHint: 0.14 },
+  { name: 'E', sHint: 0.28 },
+  { name: 'CHI', sHint: 0.52 },
+  { name: 'HP', sHint: 0.72 },
+  { name: 'L', sHint: 0.90 }
+];
+
+const OVAL_LAYOUT = {
+  LEFT: -600, RIGHT: 600, TOP: -400, BOT: 400,
+  mapWidth: 1200, mapHeight: 800,
+  R: 400,
+  SF_LEN: 1200,
+  SF_START_LEN: 1200 / 3,
+  SF_JOIN_LEN: 1200 / 3,
+  ANCHOR: { x: 0, y: 0 }
+};
+
+const OVAL_SECTIONS = [
+  { name: 'SF', sHint: 0.08 },
+  { name: 'T1', sHint: 0.35 },
+  { name: 'BACK', sHint: 0.58 },
+  { name: 'T2', sHint: 0.82 }
+];
+
+const COURSE_DEFS = {
+  gp: {
+    id: 'gp',
+    label: 'GPコース',
+    name: 'Grand Prix Circuit',
+    menuDesc: 'GPコース（標準）を4周！<br>シケインとヘアピンを攻略せよ',
+    layout: GP_LAYOUT,
+    sections: GP_SECTIONS,
+    build: buildGPTrack
+  },
+  oval: {
+    id: 'oval',
+    label: 'オーバル',
+    name: 'Oval Speedway',
+    menuDesc: 'オーバルコースを4周！<br>高速ストレートとターンを攻略せよ',
+    layout: OVAL_LAYOUT,
+    sections: OVAL_SECTIONS,
+    build: buildOvalTrack
+  }
+};
+
+const POINT_SPACING = 28;
+
+function pushPt(raw, x, y, tangent, meta) {
+  const last = raw[raw.length - 1];
+  if (last && Math.hypot(last.x - x, last.y - y) < 0.5) return;
+  raw.push({ x, y, tangent, meta: meta || null });
+}
+
+function normAngle(da) {
+  while (da > Math.PI) da -= Math.PI * 2;
+  while (da < -Math.PI) da += Math.PI * 2;
+  return da;
+}
+
+// 方位の正規表現を統一 (π/2 と -3π/2 等のぶれを解消)
+function canonicalHeading(h) {
+  return normAngle(h);
+}
+
+// コース組み立て: points[] と state{x,y,h} を各関数が受け渡す
+function createTrackBuilder(points, state) {
+  function pushArcPt(Cx, Cy, R, px, py, tang, ccw) {
+    pushPt(points, px, py, tang, { kind: 'arc', cc: { x: Cx, y: Cy }, R, ccw });
+  }
+
+  // スタート — 位置とベクトルをセット
+  function start(x, y, heading) {
+    state.x = x;
+    state.y = y;
+    state.h = heading;
+    pushPt(points, x, y, heading, { kind: 'line' });
+    return api;
+  }
+
+  // 直進 — 距離 len だけ (h は絶対に変えない)
+  function straight(len) {
+    if (Math.abs(len) < 0.5) return api;
+    state.h = canonicalHeading(state.h);
+    const last = points[points.length - 1];
+    if (last && Math.hypot(last.x - state.x, last.y - state.y) < 0.5) {
+      last.tangent = state.h;
+    }
+    const tx = state.x + Math.cos(state.h) * len;
+    const ty = state.y + Math.sin(state.h) * len;
+    const dist = Math.abs(len);
+    const n = Math.max(2, Math.ceil(dist / POINT_SPACING));
+    // 負距離は h を変えず座標だけ戻す (SF閉鎖) — 点の接線は進行方向に合わせる
+    const tang = len >= 0 ? state.h : canonicalHeading(state.h + Math.PI);
+    for (let i = 1; i < n; i++) {
+      const t = i / (n - 1);
+      pushPt(points,
+        state.x + (tx - state.x) * t,
+        state.y + (ty - state.y) * t,
+        tang, { kind: 'line' });
+    }
+    pushPt(points, tx, ty, tang, { kind: 'line' });
+    state.x = tx;
+    state.y = ty;
+    return api;
+  }
+
+  // コーナー — 回転角 da (左=+ / 右=−) と半径 R。h を da だけ回転 (90°=±π/2, ヘアピン=π)
+  function corner(da, R) {
+    if (Math.abs(da) < 1e-6 || R < 1) return api;
+    const h0 = canonicalHeading(state.h);
+    const turnSign = da > 0 ? 1 : -1;
+    const ccw = da > 0;
+    const rx = -Math.sin(h0), ry = Math.cos(h0);
+    const Cx = state.x + turnSign * R * rx;
+    const Cy = state.y + turnSign * R * ry;
+    const a0 = Math.atan2(state.y - Cy, state.x - Cx);
+    const a1 = a0 + da;
+    const h1 = canonicalHeading(h0 + da);
+    const exitX = Cx + R * Math.cos(a1);
+    const exitY = Cy + R * Math.sin(a1);
+    const tang0 = canonicalHeading(ccw ? a0 + Math.PI / 2 : a0 - Math.PI / 2);
+    const steps = Math.max(6, Math.ceil(Math.abs(da) * R / 6));
+    const last = points[points.length - 1];
+    if (last && Math.hypot(last.x - state.x, last.y - state.y) < 0.5
+        && Math.abs(normAngle(tang0 - h0)) < 0.06) {
+      last.tangent = tang0;
+    }
+    const i0 = (last && Math.hypot(last.x - state.x, last.y - state.y) < 0.5) ? 1 : 0;
+    for (let i = i0; i <= steps; i++) {
+      const t = i / steps;
+      const a = a0 + da * t;
+      const tang = canonicalHeading(ccw ? a + Math.PI / 2 : a - Math.PI / 2);
+      pushArcPt(Cx, Cy, R, Cx + R * Math.cos(a), Cy + R * Math.sin(a), tang, ccw);
+    }
+    const lastArc = points[points.length - 1];
+    if (lastArc) lastArc.tangent = h1;
+    state.x = exitX;
+    state.y = exitY;
+    state.h = h1;
+    return api;
+  }
+
+  const api = { start, straight, corner };
+  return api;
+}
+
+// GPコース: straight(距離) と corner(角度,R) の直列呼び出し
+function buildGPTrack(points, state, L) {
+  const t = createTrackBuilder(points, state);
+  const L90 = Math.PI / 2;
+
+  t.start(L.LEFT + L.SF_START_LEN, L.TOP, 0); // スタート = SF直線 1/3 地点
+  t.straight(L.SF_LEN - L.SF_START_LEN);       // SF残り → T1
+  t.corner(L90, L.R);                     // T1  東→南
+  t.straight(L.E_STRAIGHT_LEN);           // 東ストレート
+  t.corner(L90, L.R);                     // BR  南→西
+  t.straight(L.S_STRAIGHT_LEN);           // 南ストレート
+  t.corner(L90, L.R_CHI);                 // シケイン① 西→北
+  t.straight(L.CHI_STRAIGHT_LEN);         // シケイン直
+  t.corner(-L90, L.R_CHI);                // シケイン② 北→西
+  t.straight(L.HP_WEST_LEN);              // 西ストレート
+  t.corner(-L90, L.R_HP);                 // 西→南
+  t.straight(L.HP_STRAIGHT_LEN);          // ヘアピン手前 南ストレート
+  t.corner(Math.PI, L.R_HP);               // ヘアピン 180° U字
+  t.straight(L.N_STRAIGHT_LEN);           // 西縦 北ストレート
+  t.corner(L90, L.R);                     // TL  北→東
+  t.straight(L.SF_JOIN_LEN);              // TL出口 → スタート (SF上を東へ)
+}
+
+function buildOvalTrack(points, state, L) {
+  const t = createTrackBuilder(points, state);
+  t.start(L.LEFT + L.SF_START_LEN, L.BOT, 0);
+  t.straight(L.SF_LEN - L.SF_START_LEN);
+  t.corner(Math.PI, L.R);
+  t.straight(L.SF_LEN);
+  t.corner(Math.PI, L.R);
+  t.straight(L.SF_JOIN_LEN);
+}
+
+function buildCenterlineFromBuilder(buildFn, layout) {
+  const raw = [];
+  const state = { x: 0, y: 0, h: 0 };
+  buildFn(raw, state, layout);
+
+  const m = raw.length;
+  const line = [];
+  let s = 0;
+  for (let i = 0; i < m; i++) {
+    const prev = raw[(i - 1 + m) % m];
+    const curr = raw[i];
+    if (i > 0) s += Math.hypot(curr.x - prev.x, curr.y - prev.y);
+    line.push({
+      x: curr.x,
+      y: curr.y,
+      s,
+      tangent: curr.tangent,
+      curvature: 0,
+      meta: curr.meta
+    });
+  }
+  const total = s + Math.hypot(raw[0].x - raw[m - 1].x, raw[0].y - raw[m - 1].y);
+  for (let i = 0; i < m; i++) {
+    if (line[i].meta && line[i].meta.kind === 'arc' && line[i].meta.R > 0) {
+      line[i].curvature = 1 / line[i].meta.R;
+    }
+  }
+  return { points: line, length: total };
+}
+
+let trackLayout = GP_LAYOUT;
+let trackSections = GP_SECTIONS;
+let CENTERLINE = [];
+let TRACK_LENGTH = 0;
+
+// 外側法線を一周通して連続化 (ヘアピン頂点での反転・白線クロスを防ぐ)
+function buildOutwardNormals() {
+  const normals = [];
+  for (let i = 0; i < CENTERLINE.length; i++) {
+    const p = CENTERLINE[i];
+    const tx = Math.cos(p.tangent), ty = Math.sin(p.tangent);
+    const n1x = -ty, n1y = tx;
+    const n2x = ty, n2y = -tx;
+    if (i === 0) {
+      const ac = trackLayout.ANCHOR;
+      const toCx = ac.x - p.x, toCy = ac.y - p.y;
+      const dot1 = n1x * toCx + n1y * toCy;
+      const dot2 = n2x * toCx + n2y * toCy;
+      normals.push(dot1 < dot2 ? { x: n1x, y: n1y } : { x: n2x, y: n2y });
+    } else {
+      const prev = normals[i - 1];
+      const d1 = n1x * prev.x + n1y * prev.y;
+      const d2 = n2x * prev.x + n2y * prev.y;
+      normals.push(d1 >= d2 ? { x: n1x, y: n1y } : { x: n2x, y: n2y });
+    }
+  }
+  return normals;
+}
+
+let TRACK_OUTWARD_NORMALS = [];
+const START_LINE_S = 0;
+const START_GRID_OFFSET = 34;
+const SF_LINE_ZONE = 90;
+
+function getStartGridS() {
+  return (START_LINE_S - START_GRID_OFFSET + TRACK_LENGTH) % TRACK_LENGTH;
+}
+
+function crossedStartFinishLine(lastS, s) {
+  return lastS > TRACK_LENGTH - SF_LINE_ZONE && s < SF_LINE_ZONE;
+}
+
+function segLength(i) {
+  const a = CENTERLINE[i];
+  if (i + 1 < CENTERLINE.length) return CENTERLINE[i + 1].s - a.s;
+  return TRACK_LENGTH - a.s;
+}
+
+function trackPointAt(s) {
+  s = ((s % TRACK_LENGTH) + TRACK_LENGTH) % TRACK_LENGTH;
+  for (let i = CENTERLINE.length - 1; i >= 0; i--) {
+    if (CENTERLINE[i].s <= s) {
+      const a = CENTERLINE[i];
+      const b = CENTERLINE[(i + 1) % CENTERLINE.length];
+      const len = segLength(i);
+      const t = len > 0 ? (s - a.s) / len : 0;
+      const dTan = normAngle(b.tangent - a.tangent);
+      return {
+        x: a.x + (b.x - a.x) * t,
+        y: a.y + (b.y - a.y) * t,
+        tangent: normAngle(a.tangent + dTan * t),
+        curvature: a.curvature + (b.curvature - a.curvature) * t,
+        s
+      };
+    }
+  }
+  return { ...CENTERLINE[0], s };
+}
+
+function sDist(a, b) {
+  let d = Math.abs(a - b);
+  if (d > TRACK_LENGTH / 2) d = TRACK_LENGTH - d;
+  return d;
+}
+
+function nearestTrackInfo(wx, wy, hintS) {
+  const n = CENTERLINE.length;
+  let best = null;
+
+  function consider(px, py, tangent, curvature, s, segIdx) {
+    const dx = wx - px, dy = wy - py;
+    const tx = Math.cos(tangent), ty = Math.sin(tangent);
+    const lateral = -dx * ty + dy * tx;
+    const dist = Math.hypot(dx, dy);
+    const better = !best
+      || dist < best.dist - 1
+      || (dist < best.dist + 4 && hintS !== undefined && sDist(s, hintS) < sDist(best.s, hintS) - 8);
+    if (better) {
+      best = { x: px, y: py, tangent, curvature, s, lateral, dist, segIdx };
+    }
+  }
+
+  for (let i = 0; i < n; i++) {
+    const a = CENTERLINE[i];
+    const b = CENTERLINE[(i + 1) % n];
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const len2 = dx * dx + dy * dy;
+    let t = len2 > 0 ? ((wx - a.x) * dx + (wy - a.y) * dy) / len2 : 0;
+    t = Math.max(0, Math.min(1, t));
+    const px = a.x + dx * t, py = a.y + dy * t;
+    const slen = segLength(i);
+    const s = a.s + slen * t;
+    const dTan = normAngle(b.tangent - a.tangent);
+    const tangent = normAngle(a.tangent + dTan * t);
+    const curvature = a.curvature + (b.curvature - a.curvature) * t;
+    consider(px, py, tangent, curvature, s, i);
+  }
+
+  const tx = Math.cos(best.tangent), ty = Math.sin(best.tangent);
+  best.outNx = ty;
+  best.outNy = -tx;
+  best.inNx = -ty;
+  best.inNy = tx;
+  return best;
+}
+
+// 接線に垂直な外側法線 (インフィールドと反対側を常に外側に)
+function outwardNormal(p) {
+  const tx = Math.cos(p.tangent), ty = Math.sin(p.tangent);
+  const n1x = -ty, n1y = tx;
+  const n2x = ty, n2y = -tx;
+  const ac = trackLayout.ANCHOR;
+  const toCx = ac.x - p.x, toCy = ac.y - p.y;
+  const dot1 = n1x * toCx + n1y * toCy;
+  const dot2 = n2x * toCx + n2y * toCy;
+  return dot1 < dot2 ? { x: n1x, y: n1y } : { x: n2x, y: n2y };
+}
+
+function offsetPoint(p, lateral) {
+  const n = outwardNormal(p);
+  return { x: p.x - n.x * lateral, y: p.y - n.y * lateral };
+}
+
+// 円弧エッジ半径: ccw/cw で内外の R±幅/2 を決める (innerSign 不要)
+function arcEdgeRadius(R, lateral, ccw) {
+  const half = Math.abs(lateral);
+  const outer = lateral < 0;
+  if (ccw) {
+    return Math.max(outer ? R + half : R - half, 12);
+  }
+  return Math.max(outer ? R - half : R + half, 12);
+}
+
+// 3点から円心を求める (図面のR作図と同じ原理)
+function circumcenter(ax, ay, bx, by, cx, cy) {
+  const d = 2 * (ax * (by - cy) + bx * (cy - ay) + cx * (ay - by));
+  if (Math.abs(d) < 1e-4) return null;
+  const a2 = ax * ax + ay * ay, b2 = bx * bx + by * by, c2 = cx * cx + cy * cy;
+  return {
+    x: (a2 * (by - cy) + b2 * (cy - ay) + c2 * (ay - by)) / d,
+    y: (a2 * (cx - bx) + b2 * (ax - cx) + c2 * (bx - ax)) / d
+  };
+}
+
+// 図面のR作図: 各点で曲がりを検知 → 曲がり側のR円 → 同心円で反対側の線
+const CORNER_SPAN = 6;
+const STRAIGHT_ANGLE_THRESH = 0.01;
+const CORNER_MIN_R = 50;
+const CORNER_MAX_R = 3500;
+
+function localCornerCC(i) {
+  const n = CENTERLINE.length;
+  const p = CENTERLINE[i];
+  const prev = CENTERLINE[(i - 1 + n) % n];
+  const next = CENTERLINE[(i + 1) % n];
+  const v1x = p.x - prev.x, v1y = p.y - prev.y;
+  const v2x = next.x - p.x, v2y = next.y - p.y;
+  const cross = v1x * v2y - v1y * v2x;
+  const dot = v1x * v2x + v1y * v2y;
+  const turnAngle = Math.atan2(cross, dot);
+  if (Math.abs(turnAngle) < STRAIGHT_ANGLE_THRESH) return null;
+
+  const is = (i - CORNER_SPAN + n) % n;
+  const ie = (i + CORNER_SPAN) % n;
+  const cc = circumcenter(
+    CENTERLINE[is].x, CENTERLINE[is].y,
+    p.x, p.y,
+    CENTERLINE[ie].x, CENTERLINE[ie].y
+  );
+  if (!cc) return null;
+
+  const dx = p.x - cc.x, dy = p.y - cc.y;
+  const dist = Math.hypot(dx, dy);
+  if (dist < CORNER_MIN_R || dist > CORNER_MAX_R) return null;
+
+  // 円心が曲がり側(内側)にあることだけを採用
+  const tx = Math.cos(p.tangent), ty = Math.sin(p.tangent);
+  const innerSide = -ty * (cc.x - p.x) + tx * (cc.y - p.y);
+  if (Math.abs(cross) > 0.002 && Math.sign(innerSide) !== Math.sign(cross)) return null;
+
+  return { cc, dist, innerR: dist - TRACK.width / 2 };
+}
+
+// Canvas arc: ccw 指定方向の短い掃引角へ正規化 (a1=π / a0=-π/2 等の表記ゆれを解消)
+function fixArcEndAngle(a0, a1, ccw) {
+  let da = a1 - a0;
+  if (ccw) {
+    while (da <= 1e-6) da += Math.PI * 2;
+    if (da > Math.PI) da -= Math.PI * 2;
+  } else {
+    while (da >= -1e-6) da -= Math.PI * 2;
+    if (da < -Math.PI) da += Math.PI * 2;
+  }
+  return a0 + da;
+}
+
+function offsetEdgePoint(i, lateral) {
+  const p = CENTERLINE[i];
+  const meta = p.meta;
+  // メインコーナー (R≥500・左回り) のみ同心円オフセット。他は連続法線で垂直オフセット
+  if (meta && meta.kind === 'arc' && meta.ccw === true && meta.R >= 500 && meta.cc && meta.R > 0) {
+    const dx = p.x - meta.cc.x, dy = p.y - meta.cc.y;
+    const dist = Math.hypot(dx, dy);
+    if (dist > 1) {
+      const edgeR = arcEdgeRadius(meta.R, lateral, true);
+      return {
+        x: meta.cc.x + (dx / dist) * edgeR,
+        y: meta.cc.y + (dy / dist) * edgeR
+      };
+    }
+  }
+  const n = TRACK_OUTWARD_NORMALS[i];
+  return { x: p.x - n.x * lateral, y: p.y - n.y * lateral };
+}
+
+// 中心線を直線区間と円弧区間に分割 (描画共通)
+function buildTrackSegments() {
+  const segments = [];
+  const n = CENTERLINE.length;
+  let i = 0;
+  while (i < n) {
+    const m = CENTERLINE[i].meta;
+    if (m && m.kind === 'arc' && m.cc && m.R > 0) {
+      const cc = m.cc;
+      const R = m.R;
+      const ccw = m.ccw === true;
+      const a0 = Math.atan2(CENTERLINE[i].y - cc.y, CENTERLINE[i].x - cc.x);
+      let j = i + 1;
+      while (j < n) {
+        const qm = CENTERLINE[j].meta;
+        if (!qm || qm.kind !== 'arc' || !qm.cc
+          || qm.cc.x !== cc.x || qm.cc.y !== cc.y || qm.R !== R) break;
+        j++;
+      }
+      const a1Idx = j - 1;
+      const a1 = fixArcEndAngle(
+        a0,
+        Math.atan2(CENTERLINE[a1Idx].y - cc.y, CENTERLINE[a1Idx].x - cc.x),
+        ccw
+      );
+      segments.push({ kind: 'arc', i, j: a1Idx, cc, R, ccw, a0, a1 });
+      i = j;
+    } else {
+      let j = i + 1;
+      while (j < n) {
+        const qm = CENTERLINE[j].meta;
+        if (qm && qm.kind === 'arc' && qm.cc && qm.R > 0) break;
+        j++;
+      }
+      segments.push({ kind: 'line', i, j: j - 1 });
+      i = j;
+    }
+  }
+  return segments;
+}
+
+let TRACK_SEGMENTS = [];
+
+function appendTrackPath(ctx, lateral, reverse) {
+  let started = false;
+
+  function go(px, py) {
+    if (!started) { ctx.moveTo(px, py); started = true; }
+    else ctx.lineTo(px, py);
+  }
+
+  function edgeAt(k) {
+    return lateral === null ? CENTERLINE[k] : offsetEdgePoint(k, lateral);
+  }
+
+  const segs = reverse ? TRACK_SEGMENTS.length - 1 : 0;
+  const dend = reverse ? -1 : TRACK_SEGMENTS.length;
+  const step = reverse ? -1 : 1;
+
+  for (let s = segs; s !== dend; s += step) {
+    const seg = TRACK_SEGMENTS[s];
+    const useArcPrimitive = seg.kind === 'arc' && seg.ccw && seg.R >= 500;
+    if (useArcPrimitive) {
+      const edgeR = lateral === null ? seg.R : arcEdgeRadius(seg.R, lateral, true);
+      const cc = seg.cc;
+      const a0 = reverse ? seg.a1 : seg.a0;
+      const a1 = reverse ? seg.a0 : seg.a1;
+      const ccw = reverse ? !seg.ccw : seg.ccw;
+      go(cc.x + Math.cos(a0) * edgeR, cc.y + Math.sin(a0) * edgeR);
+      ctx.arc(cc.x, cc.y, edgeR, a0, a1, !ccw);
+      started = true;
+    } else {
+      for (let k = reverse ? seg.j : seg.i; reverse ? k >= seg.i : k <= seg.j; k += reverse ? -1 : 1) {
+        const pt = edgeAt(k);
+        go(pt.x, pt.y);
+      }
+    }
+  }
+}
+
+function buildOffsetEdge(lateral) {
+  return CENTERLINE.map((_, i) => offsetEdgePoint(i, lateral));
+}
+
+function getCornerRAt(i) {
+  const p = CENTERLINE[i];
+  if (p.meta && p.meta.kind === 'arc' && p.meta.R > 0) {
+    return {
+      cc: p.meta.cc,
+      r: Math.round(p.meta.R),
+      innerR: Math.round(p.meta.R - TRACK.width / 2)
+    };
+  }
+  const corner = localCornerCC(i);
+  if (!corner || corner.innerR < 20) return null;
+  return { cc: corner.cc, r: Math.round(corner.dist), innerR: Math.round(corner.innerR) };
+}
+
+function getTrackBounds() {
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  const pad = TRACK.width / 2 + 100;
+  for (const p of CENTERLINE) {
+    minX = Math.min(minX, p.x - pad); maxX = Math.max(maxX, p.x + pad);
+    minY = Math.min(minY, p.y - pad); maxY = Math.max(maxY, p.y + pad);
+  }
+  return { minX, maxX, minY, maxY };
+}
+
+let TRACK_BOUNDS = getTrackBounds();
+
+function initTrack(courseId) {
+  const def = COURSE_DEFS[courseId] || COURSE_DEFS.oval;
+  settings.courseId = def.id;
+  TRACK.name = def.name;
+  trackLayout = def.layout;
+  trackSections = def.sections;
+  const data = buildCenterlineFromBuilder(def.build, def.layout);
+  CENTERLINE = data.points;
+  TRACK_LENGTH = data.length;
+  TRACK_OUTWARD_NORMALS = buildOutwardNormals();
+  TRACK_SEGMENTS = buildTrackSegments();
+  TRACK_BOUNDS = getTrackBounds();
+  saveSettings();
+  updateRecordDisplays();
+  updateMenuCopy();
+}
+
+function updateMenuCopy() {
+  const def = COURSE_DEFS[settings.courseId] || COURSE_DEFS.oval;
+  const el = document.getElementById('menuDesc');
+  if (el) el.innerHTML = def.menuDesc;
+  updateMenuCourseUI();
+}
+
+function getSurface(wx, wy, hintS) {
+  const info = nearestTrackInfo(wx, wy, hintS);
+  const lat = Math.abs(info.lateral);
+  const half = TRACK.width / 2;
+  const gravel = TRACK.gravelWidth;
+  if (lat <= half) return 'asphalt';
+  if (lat <= half + gravel) return 'gravel';
+  return 'grass';
+}
+
+function wallDistance(wx, wy, hintS) {
+  const info = nearestTrackInfo(wx, wy, hintS);
+  const half = TRACK.width / 2;
+  const grassEdge = half + TRACK.gravelWidth;
+
+  if (info.lateral > grassEdge) {
+    return { hit: true, dist: info.lateral - grassEdge, nx: info.inNx, ny: info.inNy };
+  }
+  if (info.lateral < -grassEdge) {
+    return { hit: true, dist: -(info.lateral + grassEdge), nx: info.outNx, ny: info.outNy };
+  }
+  return { hit: false, dist: 0, nx: 0, ny: 0 };
+}
+
+// 中心線上の座標 + 横オフセット (lateral>0 = インフィールド側)
+function posOnTrack(s, lateral) {
+  const p = trackPointAt(s);
+  const tx = Math.cos(p.tangent), ty = Math.sin(p.tangent);
+  return {
+    x: p.x - ty * lateral,
+    y: p.y + tx * lateral,
+    angle: p.tangent,
+    s: p.s
+  };
+}
+
+// 車体角度(=接線方向) → カメラ回転 (車は常に画面上向き)
+function getCameraAngle(carAngle) {
+  return carAngle + Math.PI / 2;
+}
+
+// ============================================================
+// 物理エンジン — タイヤモデル (簡易ペースリカ)
+// 縦方向・横方向の力を分離して慣性・スリップを再現
+// ============================================================
+class CarPhysics {
+  constructor(x, y, angle, color, number) {
+    this.x = x; this.y = y;
+    this.angle = angle;          // 車体の向き
+    this.vx = 0; this.vy = 0;   // ワールド速度
+    this.speed = 0;              // スカラー速度
+    this.steer = 0;              // ステアリング入力 (-1〜1)
+    this.steerSmoothed = 0;      // スムージング後のステア値
+    this.throttle = 0;
+    this.brake = 0;
+    this.handbrake = false;
+    this.color = color;
+    this.number = number;
+    this.width = 24;
+    this.length = 52;
+    this.maxSpeed = 435;         // 最高速度 (表示×1.2≒km/h)
+    this.enginePower = 230;      // 加速度 (m/s² 相当)
+    this.brakePower = 200;
+    this.mass = 1;
+    // ラップ管理
+    this.lap = 0;
+    this.lapTime = 0;
+    this.bestLap = 999;
+    this.lastS = 0;
+    this.totalProgress = 0;
+    this.finished = false;
+    this.finishTime = 0;
+    // スリップ状態
+    this.slipRatio = 0;
+    this.slipAngle = 0;
+    this.isDrifting = false;
+  }
+
+  update(dt, isAI, aiTargetSpeed, aiSteer) {
+    const surf = getSurface(this.x, this.y, this.lastS);
+    const surfGrip = { asphalt: 1.0, gravel: 0.4, grass: 0.2 }[surf];
+    const surfDrag = { asphalt: 0.6, gravel: 2.5, grass: 5.0 }[surf]; // 1/s 減衰係数
+
+    if (isAI) {
+      this.throttle = this.speed < aiTargetSpeed ? 1 : 0;
+      this.brake = this.speed > aiTargetSpeed + 20 ? 0.6 : 0;
+      this.steer = aiSteer;
+      this.handbrake = false;
+    } else {
+      this.throttle = (keys['ArrowUp'] || keys['KeyW']) ? 1 : 0;
+      this.brake = (keys['ArrowDown'] || keys['KeyS']) ? 1 : 0;
+      this.steer = (keys['ArrowLeft'] || keys['KeyA'] ? -1 : 0) + (keys['ArrowRight'] || keys['KeyD'] ? 1 : 0);
+      this.handbrake = keys['Space'];
+    }
+
+    // 速度 (m/s 相当の単位)
+    this.speed = Math.hypot(this.vx, this.vy);
+
+    // 速度依存の最大ステアリング角 — 高速ほど切れにくい
+    const speedFactor = Math.max(0.06, 1 - this.speed / 220);
+    const maxSteer = 0.16 * speedFactor;
+    if (!isAI) {
+      // 急な切り返しを抑えるスムージング
+      this.steerSmoothed += (this.steer - this.steerSmoothed) * Math.min(1, dt * 5);
+    } else {
+      this.steerSmoothed = this.steer;
+    }
+    const steerAngle = this.steerSmoothed * maxSteer;
+
+    // 車体座標系の速度成分
+    const cosA = Math.cos(this.angle), sinA = Math.sin(this.angle);
+    const vLong = this.vx * cosA + this.vy * sinA;   // 前後方向
+    const vLat = -this.vx * sinA + this.vy * cosA;   // 左右方向
+
+    // --- 縦方向の力 ---
+    let fLong = 0;
+    if (this.throttle > 0 && vLong >= -5) {
+      fLong += this.enginePower * this.throttle * surfGrip;
+    }
+    if (this.brake > 0) {
+      fLong -= this.brakePower * this.brake * Math.sign(vLong || 1);
+    }
+    if (this.handbrake) {
+      fLong -= this.brakePower * 0.7 * Math.sign(vLong || 1);
+    }
+    // エンジンブレーキ
+    if (this.throttle === 0 && !this.brake) fLong -= 15 * Math.sign(vLong || 1);
+
+    // --- 横方向のグリップ (タイヤモデル) ---
+    const baseGrip = 1.8 * surfGrip;
+    let latGrip = baseGrip;
+    let longGrip = baseGrip;
+
+    // ハンドブレーキ: 後輪グリップ低下 → ドリフト
+    if (this.handbrake && this.speed > 30) {
+      latGrip *= 0.4;
+      longGrip *= 0.6;
+      this.isDrifting = Math.abs(vLat) > 8;
+    } else {
+      this.isDrifting = false;
+    }
+
+    // スリップ角によるグリップ低下 (オーバーステア/アンダーステア)
+    this.slipAngle = Math.atan2(vLat, Math.abs(vLong) + 0.1);
+    const slipGrip = Math.max(0.2, 1 - Math.abs(this.slipAngle) * 1.5);
+    latGrip *= slipGrip;
+
+    // 横方向力 (タイヤが横滑りを抑制)
+    const fLat = -vLat * latGrip;
+
+    // 旋回 — 前輪ステアリングによるヨーレート (大きく振りすぎないよう制限)
+    const wheelBase = 5.2;
+    let yawRate = (vLong / wheelBase) * Math.tan(steerAngle);
+    const maxYaw = 1.1 + this.speed * 0.004;
+    yawRate = Math.max(-maxYaw, Math.min(maxYaw, yawRate));
+    this.angle += yawRate * dt;
+
+    // 速度更新 (車体座標 → ワールド座標)
+    const newVLong = vLong + fLong * dt;
+    const newVLat = vLat + fLat * dt;
+
+    this.vx = newVLong * cosA - newVLat * sinA;
+    this.vy = newVLong * sinA + newVLat * cosA;
+
+    // 摩擦による減衰 (フレーム非依存)
+    const dragMul = Math.max(0, 1 - surfDrag * dt);
+    this.vx *= dragMul;
+    this.vy *= dragMul;
+
+    // 最大速度制限
+    this.speed = Math.hypot(this.vx, this.vy);
+    if (this.speed > this.maxSpeed) {
+      const scale = this.maxSpeed / this.speed;
+      this.vx *= scale; this.vy *= scale;
+      this.speed = this.maxSpeed;
+    }
+
+    // 位置更新
+    this.x += this.vx * dt;
+    this.y += this.vy * dt;
+
+    // 壁衝突
+    const wall = wallDistance(this.x, this.y, this.lastS);
+    if (wall.hit && wall.dist > 0.5) {
+      // 法線方向に押し出し (1フレームの押し戻し量を制限)
+      const push = Math.min(wall.dist, 6);
+      this.x -= wall.nx * push;
+      this.y -= wall.ny * push;
+      const vDotN = this.vx * wall.nx + this.vy * wall.ny;
+      if (vDotN > 0) {
+        this.vx -= wall.nx * vDotN * 1.6;
+        this.vy -= wall.ny * vDotN * 1.6;
+      }
+      audio.playCollision();
+      particles.spawn(this.x, this.y, 'spark', 8);
+    }
+
+    // ドリフト煙
+    if (this.isDrifting || (Math.abs(this.slipAngle) > 0.3 && this.speed > 50)) {
+      const rearX = this.x - Math.cos(this.angle) * 20;
+      const rearY = this.y - Math.sin(this.angle) * 20;
+      particles.spawn(rearX, rearY, 'smoke', 2);
+    }
+
+    // 排気 (加速時)
+    if (this.throttle > 0 && this.speed > 20) {
+      const exX = this.x - Math.cos(this.angle) * 24;
+      const exY = this.y - Math.sin(this.angle) * 24;
+      particles.spawn(exX, exY, 'exhaust', 1);
+    }
+
+    this.speed = Math.hypot(this.vx, this.vy);
+    this.slipRatio = Math.abs(this.slipAngle);
+  }
+
+  // ラップ進行 — スタート/ゴールライン (s=0) の通過で判定
+  checkLap() {
+    const info = nearestTrackInfo(this.x, this.y, this.lastS);
+    let delta = info.s - this.lastS;
+    if (delta < -TRACK_LENGTH / 2) delta += TRACK_LENGTH;
+    if (delta > TRACK_LENGTH / 2) delta -= TRACK_LENGTH;
+    if (delta > 0) this.totalProgress += delta;
+
+    if (crossedStartFinishLine(this.lastS, info.s) && delta > 0
+        && this.lapTime > 3 && this.speed > 8) {
+      if (this.lapTime < this.bestLap) this.bestLap = this.lapTime;
+      trySaveLapRecord(this.lapTime);
+      this.lap++;
+      this.lapTime = 0;
+      if (this.lap >= settings.totalLaps) {
+        this.finished = true;
+        this.finishTime = raceTime;
+      }
+    }
+    this.lastS = info.s;
+    this.lapTime += 1 / 60;
+  }
+}
+
+// ============================================================
+// パーティクル
+// ============================================================
+const particles = {
+  list: [],
+  spawn(x, y, type, count) {
+    for (let i = 0; i < count; i++) {
+      this.list.push({
+        x, y, type,
+        vx: (Math.random() - 0.5) * 30,
+        vy: (Math.random() - 0.5) * 30,
+        life: 1,
+        decay: 0.02 + Math.random() * 0.03
+      });
+    }
+  },
+  update(dt) {
+    for (let i = this.list.length - 1; i >= 0; i--) {
+      const p = this.list[i];
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.life -= p.decay;
+      if (p.life <= 0) this.list.splice(i, 1);
+    }
+  },
+  draw(camX, camY, camAngle) {
+    ctx.save();
+    ctx.translate(canvas.width / 2, canvas.height / 2);
+    ctx.rotate(-camAngle);
+    ctx.translate(-camX, -camY);
+    for (const p of this.list) {
+      ctx.globalAlpha = p.life;
+      if (p.type === 'smoke') {
+        ctx.fillStyle = `rgba(180,180,180,${p.life * 0.5})`;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 6 * (2 - p.life), 0, Math.PI * 2);
+        ctx.fill();
+      } else if (p.type === 'spark') {
+        ctx.fillStyle = `rgba(255,200,50,${p.life})`;
+        ctx.fillRect(p.x - 2, p.y - 2, 4, 4);
+      } else if (p.type === 'exhaust') {
+        ctx.fillStyle = `rgba(100,100,120,${p.life * 0.3})`;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+};
+
+// ============================================================
+// 描画 — トラック・車・カメラ
+// ============================================================
+function fillTrackBand(outerLat, innerLat, color) {
+  ctx.beginPath();
+  appendTrackPath(ctx, outerLat, false);
+  appendTrackPath(ctx, innerLat, true);
+  ctx.closePath();
+  ctx.fillStyle = color;
+  ctx.fill();
+}
+
+function strokeOffsetEdge(lateral, color, width, dash) {
+  ctx.beginPath();
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  appendTrackPath(ctx, lateral, false);
+  ctx.closePath();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = width;
+  if (dash) ctx.setLineDash(dash);
+  ctx.stroke();
+  ctx.setLineDash([]);
+}
+
+function strokeCenterline(dash) {
+  ctx.beginPath();
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  appendTrackPath(ctx, null, false);
+  ctx.closePath();
+  if (dash) ctx.setLineDash(dash);
+  ctx.stroke();
+  ctx.setLineDash([]);
+}
+
+function drawTrack(camX, camY, camAngle) {
+  ctx.save();
+  ctx.translate(canvas.width / 2, canvas.height / 2);
+  ctx.rotate(-camAngle);
+  ctx.translate(-camX, -camY);
+
+  const half = TRACK.width / 2;
+  const b = TRACK_BOUNDS;
+
+  // 外周芝生
+  ctx.fillStyle = '#2d5a1e';
+  ctx.fillRect(b.minX - 200, b.minY - 200, b.maxX - b.minX + 400, b.maxY - b.minY + 400);
+
+  // 砂利帯 (内外とも同幅)
+  const gravel = TRACK.gravelWidth;
+  fillTrackBand(-half - gravel, -half, '#8a7a5a');
+  fillTrackBand(half, half + gravel, '#8a7a5a');
+
+  // アスファルト
+  fillTrackBand(-half, half, '#3a3a3a');
+
+  // 白線 (外側・内側) — コーナーは曲がり側Rの同心円、直線は垂直オフセット
+  strokeOffsetEdge(-half, '#fff', 3.5);
+  strokeOffsetEdge(half, '#fff', 3.5);
+
+  // センターライン (破線)
+  ctx.strokeStyle = '#ffcc00';
+  ctx.lineWidth = 2;
+  strokeCenterline([16, 12]);
+
+  // コーナーR表記 (曲がり側・図面風)
+  const drawnR = new Set();
+  for (let i = 0; i < CENTERLINE.length; i += 10) {
+    const cr = getCornerRAt(i);
+    if (!cr || cr.r > 900 || drawnR.has(cr.innerR)) continue;
+    drawnR.add(cr.innerR);
+    const p = CENTERLINE[i];
+    const dx = p.x - cr.cc.x, dy = p.y - cr.cc.y;
+    const dist = Math.hypot(dx, dy) || 1;
+    const lx = -dy / dist * (TRACK.width / 2 + 28);
+    const ly = dx / dist * (TRACK.width / 2 + 28);
+    ctx.fillStyle = 'rgba(255,255,255,0.4)';
+    ctx.font = '10px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('R' + cr.innerR, p.x + lx, p.y + ly);
+  }
+  ctx.textAlign = 'left';
+
+  // セクション名マーカー
+  for (const sec of trackSections) {
+    const p = trackPointAt(TRACK_LENGTH * sec.sHint);
+    const o = offsetPoint(p, half + 18);
+    ctx.fillStyle = 'rgba(255,255,255,0.55)';
+    ctx.font = 'bold 11px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(sec.name, o.x, o.y);
+  }
+  ctx.textAlign = 'left';
+
+  // スタート / ゴールライン (同一位置)
+  const start = trackPointAt(START_LINE_S);
+  ctx.save();
+  ctx.translate(start.x, start.y);
+  ctx.rotate(start.tangent);
+  const checkSize = 8;
+  for (let i = -half; i < half; i += checkSize) {
+    ctx.fillStyle = (Math.floor((i + half) / checkSize) % 2 === 0) ? '#fff' : '#111';
+    ctx.fillRect(-3, i, 6, checkSize);
+  }
+  ctx.fillStyle = 'rgba(255,255,255,0.9)';
+  ctx.font = 'bold 10px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('START / GOAL', 0, -half - 14);
+  ctx.restore();
+
+  // ピットレーン
+  const pit = trackPointAt(START_LINE_S - 40);
+  const pitOut = offsetPoint(pit, half + 10);
+  const pitEnd = offsetPoint(pit, half + TRACK.pitWidth);
+  ctx.strokeStyle = '#ff4444';
+  ctx.lineWidth = 2;
+  ctx.setLineDash([8, 8]);
+  ctx.beginPath();
+  ctx.moveTo(pitOut.x, pitOut.y);
+  ctx.lineTo(pitEnd.x + Math.cos(pit.tangent) * 60, pitEnd.y + Math.sin(pit.tangent) * 60);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  ctx.restore();
+}
+
+// 車の描画 — トップダウン F1 (プレイヤーは画面中央)
+function drawCar(car, isPlayer, alpha) {
+  if (alpha === undefined) alpha = 1;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  if (isPlayer) {
+    ctx.translate(canvas.width / 2, canvas.height / 2);
+  } else {
+    ctx.translate(canvas.width / 2, canvas.height / 2);
+    const camA = getCameraAngle(player.angle);
+    ctx.rotate(-camA);
+    ctx.translate(-player.x, -player.y);
+    ctx.translate(car.x, car.y);
+    // スプライト正面は -Y、物理 angle は +X 基準 → プレイヤーはカメラで補正、ゴーストは +π/2
+    ctx.rotate(normAngle(car.angle + Math.PI / 2));
+  }
+
+  const w = car.width;
+  const l = car.length;
+  const hw = w / 2;
+  const hl = l / 2;
+
+  // シャドウ
+  ctx.fillStyle = 'rgba(0,0,0,0.35)';
+  ctx.beginPath();
+  ctx.ellipse(2, 3, hw + 2, hl - 2, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  function drawWheel(wx, wy, ww, wh) {
+    ctx.fillStyle = '#1a1a1a';
+    ctx.beginPath();
+    ctx.ellipse(wx, wy, ww, wh, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#888';
+    ctx.beginPath();
+    ctx.ellipse(wx, wy, ww * 0.55, wh * 0.55, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#ccc';
+    ctx.beginPath();
+    ctx.arc(wx, wy, ww * 0.2, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // フロントウィング
+  ctx.fillStyle = '#141414';
+  ctx.fillRect(-hw - 5, -hl, w + 10, 5);
+  ctx.fillStyle = '#2a2a2a';
+  ctx.fillRect(-hw - 3, -hl + 1, w + 6, 2);
+
+  // ノーズ + サイドポッド
+  const bodyGrad = ctx.createLinearGradient(-hw, 0, hw, 0);
+  bodyGrad.addColorStop(0, shadeColor(car.color, -30));
+  bodyGrad.addColorStop(0.35, car.color);
+  bodyGrad.addColorStop(0.5, shadeColor(car.color, 35));
+  bodyGrad.addColorStop(0.65, car.color);
+  bodyGrad.addColorStop(1, shadeColor(car.color, -30));
+  ctx.fillStyle = bodyGrad;
+  ctx.beginPath();
+  ctx.moveTo(0, -hl + 4);
+  ctx.lineTo(4, -hl + 10);
+  ctx.lineTo(hw - 1, -hl + 16);
+  ctx.lineTo(hw + 1, -hl + 24);
+  ctx.lineTo(hw + 3, 2);
+  ctx.lineTo(hw - 2, hl - 14);
+  ctx.lineTo(hw - 6, hl - 4);
+  ctx.lineTo(3, hl);
+  ctx.lineTo(-3, hl);
+  ctx.lineTo(-hw + 6, hl - 4);
+  ctx.lineTo(-hw + 2, hl - 14);
+  ctx.lineTo(-hw - 3, 2);
+  ctx.lineTo(-hw - 1, -hl + 24);
+  ctx.lineTo(-hw - 1, -hl + 16);
+  ctx.lineTo(-4, -hl + 10);
+  ctx.closePath();
+  ctx.fill();
+
+  // ボディライン
+  ctx.strokeStyle = 'rgba(255,255,255,0.45)';
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.moveTo(0, -hl + 12);
+  ctx.lineTo(0, hl - 10);
+  ctx.stroke();
+
+  // ハロ
+  ctx.strokeStyle = '#555';
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  ctx.ellipse(0, -2, 7, 5, 0, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.fillStyle = '#2a2a2a';
+  ctx.beginPath();
+  ctx.ellipse(0, -2, 5, 3.5, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // コックピット
+  ctx.fillStyle = '#111';
+  ctx.beginPath();
+  ctx.ellipse(0, -2, 4, 3, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#f5d300';
+  ctx.beginPath();
+  ctx.arc(0, -3, 2.2, 0, Math.PI * 2);
+  ctx.fill();
+
+  // リアウィング
+  ctx.fillStyle = '#141414';
+  ctx.fillRect(-hw - 2, hl - 7, w + 4, 5);
+  ctx.fillStyle = car.color;
+  ctx.globalAlpha = 0.85;
+  ctx.fillRect(-hw + 2, hl - 6, w - 4, 2);
+  ctx.globalAlpha = 1;
+
+  // タイヤ
+  drawWheel(-hw + 1, -hl + 20, 5, 8);
+  drawWheel(hw - 1, -hl + 20, 5, 8);
+  drawWheel(-hw + 2, hl - 12, 5.5, 9);
+  drawWheel(hw - 2, hl - 12, 5.5, 9);
+
+  // 番号
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 10px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText(car.number, hw - 7, 4);
+  ctx.fillText(car.number, -hw + 7, 4);
+
+  // ドリフト煙マーク
+  if (car.isDrifting) {
+    ctx.globalAlpha = 0.35;
+    ctx.strokeStyle = '#444';
+    ctx.lineWidth = 4;
+    ctx.lineCap = 'round';
+    for (const sx of [-hw + 2, hw - 2]) {
+      ctx.beginPath();
+      ctx.moveTo(sx, hl - 10);
+      ctx.lineTo(sx - car.steer * 12, hl + 18);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  ctx.restore();
+}
+
+function shadeColor(hex, amount) {
+  const n = parseInt(hex.slice(1), 16);
+  const r = Math.max(0, Math.min(255, (n >> 16) + amount));
+  const g = Math.max(0, Math.min(255, ((n >> 8) & 0xff) + amount));
+  const b = Math.max(0, Math.min(255, (n & 0xff) + amount));
+  return `rgb(${r},${g},${b})`;
+}
+
+// ミニマップ
+function drawMinimap() {
+  mctx.fillStyle = 'rgba(0,0,0,0.7)';
+  mctx.fillRect(0, 0, 140, 100);
+  const mx = 70, my = 50;
+  const b = TRACK_BOUNDS;
+  const scale = Math.min(130 / (b.maxX - b.minX), 88 / (b.maxY - b.minY));
+  const ox = mx - (b.minX + b.maxX) / 2 * scale;
+  const oy = my - (b.minY + b.maxY) / 2 * scale;
+  mctx.save();
+  mctx.translate(ox, oy);
+  mctx.scale(scale, scale);
+  mctx.strokeStyle = '#ffcc00';
+  mctx.lineWidth = 2 / scale;
+  mctx.beginPath();
+  appendTrackPath(mctx, null, false);
+  mctx.closePath();
+  mctx.stroke();
+  mctx.restore();
+
+  // ゴースト
+  if (ghostCarPose) {
+    mctx.fillStyle = 'rgba(94,200,255,0.75)';
+    mctx.beginPath();
+    mctx.arc(ox + ghostCarPose.x * scale, oy + ghostCarPose.y * scale, 2.5, 0, Math.PI * 2);
+    mctx.fill();
+  }
+
+  // プレイヤー
+  mctx.fillStyle = '#f00';
+  mctx.beginPath();
+  mctx.arc(ox + player.x * scale, oy + player.y * scale, 3, 0, Math.PI * 2);
+  mctx.fill();
+}
+
+// ============================================================
+// サウンド (Web Audio API)
+// ============================================================
+const audio = {
+  ctx: null,
+  engineOsc: null,
+  engineGain: null,
+
+  init() {
+    if (this.ctx) return;
+    try {
+      this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+      this.engineOsc = this.ctx.createOscillator();
+      this.engineGain = this.ctx.createGain();
+      this.engineOsc.type = 'sawtooth';
+      this.engineOsc.frequency.value = 80;
+      this.engineGain.gain.value = 0;
+      this.engineOsc.connect(this.engineGain);
+      this.engineGain.connect(this.ctx.destination);
+      this.engineOsc.start();
+    } catch (e) {
+      console.warn('Audio init failed:', e);
+    }
+  },
+
+  updateEngine(speed) {
+    if (!this.ctx) return;
+    const freq = 60 + speed * 0.8;
+    this.engineOsc.frequency.setTargetAtTime(freq, this.ctx.currentTime, 0.05);
+    this.engineGain.gain.setTargetAtTime(
+      speed > 5 ? settings.volume * 0.08 : 0,
+      this.ctx.currentTime, 0.05
+    );
+  },
+
+  playCollision() {
+    if (!this.ctx) return;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'square';
+    osc.frequency.value = 150;
+    gain.gain.value = settings.volume * 0.15;
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+    osc.start();
+    gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.2);
+    osc.stop(this.ctx.currentTime + 0.2);
+  },
+
+  playBeep() {
+    if (!this.ctx) return;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.frequency.value = 440;
+    gain.gain.value = settings.volume * 0.1;
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+    osc.start();
+    gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.15);
+    osc.stop(this.ctx.currentTime + 0.15);
+  },
+
+  // レース終了時などにエンジン音を止める
+  stopEngine() {
+    if (!this.ctx || !this.engineGain) return;
+    this.engineGain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.02);
+    if (this.engineOsc) {
+      this.engineOsc.frequency.setTargetAtTime(60, this.ctx.currentTime, 0.05);
+    }
+  }
+};
+
+// ============================================================
+// ゲーム初期化・管理
+// ============================================================
+let player;
+let ghostCarPose = null;
+
+function initRace() {
+  initTrack(settings.courseId);
+  const gridS = getStartGridS();
+  const pole = posOnTrack(gridS, 0);
+  player = new CarPhysics(pole.x, pole.y, pole.angle, '#e63946', 1);
+  player.lastS = gridS;
+
+  seedRaceRecorder(raceRecorder, player);
+  ghostData = loadGhostData(settings.courseId);
+  ghostCarPose = ghostData ? getGhostPoseAt(ghostData, 0) : null;
+
+  raceTime = 0;
+  finishOutroTimer = 0;
+  countdownVal = 3;
+  state = 'countdown';
+  document.getElementById('overlay').classList.add('hidden');
+  document.getElementById('countdown').classList.add('show');
+  document.getElementById('countdown').textContent = '3';
+  audio.init();
+}
+
+function formatTime(t) {
+  const min = Math.floor(t / 60);
+  const sec = t % 60;
+  return `${min}:${sec.toFixed(3).padStart(6, '0')}`;
+}
+
+function updateHUD() {
+  document.getElementById('speedDisp').textContent = Math.round(player.speed * 1.2);
+  document.getElementById('lapDisp').textContent = Math.min(player.lap + 1, settings.totalLaps);
+  document.getElementById('totalLaps').textContent = settings.totalLaps;
+  const timeText = (state === 'finishing' || state === 'result')
+    ? formatTime(player.finishTime)
+    : formatTime(player.lapTime);
+  document.getElementById('timeDisp').textContent = timeText;
+  document.getElementById('bestDisp').textContent =
+    player.bestLap < 999 ? formatTime(player.bestLap) : '--';
+}
+
+function pauseGame() {
+  state = 'pause';
+  document.getElementById('overlay').classList.remove('hidden');
+  showPanel('pausePanel');
+}
+
+function showPanel(id) {
+  ['menuPanel','settingsPanel','pausePanel','resultPanel'].forEach(p => {
+    document.getElementById(p).style.display = 'none';
+  });
+  document.getElementById(id).style.display = 'block';
+}
+
+function endRace() {
+  state = 'result';
+  audio.stopEngine();
+
+  const cr = getActiveRecords();
+  const prevLap = cr.lap;
+  const prevCourse = cr.course;
+  if (player.bestLap < 999) trySaveLapRecord(player.bestLap);
+  const newCourse = trySaveCourseRecord(player.finishTime);
+  const newLap = cr.lap !== prevLap;
+  const savedGhost = persistGhostForRecordRun(player.finishTime);
+
+  document.getElementById('resultTitle').textContent = 'FINISH!';
+  let text = `総タイム: ${formatTime(player.finishTime)}\n`;
+  text += `ベストラップ: ${player.bestLap < 999 ? formatTime(player.bestLap) : '--'}\n`;
+  text += `ラップ記録: ${cr.lap !== null ? formatTime(cr.lap) : '--'}\n`;
+  text += `コース記録: ${cr.course !== null ? formatTime(cr.course) : '--'}`;
+  if (newLap || newCourse || savedGhost) {
+    text += '\n\n';
+    if (newLap) text += 'NEW LAP RECORD! ';
+    if (newCourse) text += 'NEW COURSE RECORD! ';
+    if (savedGhost) text += 'ゴースト保存';
+  }
+  document.getElementById('resultText').textContent = text;
+  document.getElementById('overlay').classList.remove('hidden');
+  showPanel('resultPanel');
+}
+
+// ============================================================
+// メインループ
+// ============================================================
+let lastTime = null;
+function gameLoop(timestamp) {
+  if (lastTime === null) lastTime = timestamp;
+  const dt = Math.min((timestamp - lastTime) / 1000, 0.05);
+  lastTime = timestamp;
+
+  if (state === 'countdown') {
+    countdownVal -= dt;
+    const display = countdownVal > 0 ? Math.ceil(countdownVal) : 'GO!';
+    document.getElementById('countdown').textContent = display;
+    if (countdownVal <= -0.5) {
+      document.getElementById('countdown').classList.remove('show');
+      state = 'racing';
+    }
+    if (Math.abs(countdownVal - Math.round(countdownVal)) < dt) audio.playBeep();
+    if (ghostData) ghostCarPose = getGhostPoseAt(ghostData, 0);
+  }
+
+  if (state === 'racing' || state === 'finishing') {
+    raceTime += dt;
+
+    player.update(dt, false);
+    if (state === 'racing') {
+      player.checkLap();
+      if (player.finished) {
+        state = 'finishing';
+        finishOutroTimer = FINISH_OUTRO_SEC;
+      }
+    } else {
+      finishOutroTimer -= dt;
+      if (finishOutroTimer <= 0) endRace();
+    }
+
+    sampleRaceRecorder(raceRecorder, raceTime, player);
+    ghostCarPose = ghostData ? getGhostPoseAt(ghostData, raceTime) : null;
+
+    particles.update(dt);
+    audio.updateEngine(player.speed);
+    updateHUD();
+  }
+
+  // 描画
+  ctx.fillStyle = '#111';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  if (state === 'racing' || state === 'finishing' || state === 'countdown') {
+    const camA = getCameraAngle(player.angle);
+    drawTrack(player.x, player.y, camA);
+    particles.draw(player.x, player.y, camA);
+
+    // 記録ゴースト（半透明）
+    if (ghostCarPose) drawCar(ghostCarPose, false, 0.42);
+
+    // プレイヤー車 (常に中央)
+    drawCar(player, true);
+
+    drawMinimap();
+  }
+
+  requestAnimationFrame(gameLoop);
+}
+
+// --- UI イベント ---
+document.getElementById('btnStart').onclick = () => {
+  audio.init();
+  initRace();
+};
+document.getElementById('btnSettings').onclick = () => {
+  updateSettingsRecordsUI();
+  showPanel('settingsPanel');
+};
+document.getElementById('btnBack').onclick = () => {
+  updateMenuCourseUI();
+  showPanel('menuPanel');
+};
+document.getElementById('btnResume').onclick = () => {
+  state = (player && player.finished && finishOutroTimer > 0) ? 'finishing' : 'racing';
+  document.getElementById('overlay').classList.add('hidden');
+};
+document.getElementById('btnRestart').onclick = () => initRace();
+document.getElementById('btnQuit').onclick = () => {
+  state = 'menu';
+  audio.stopEngine();
+  document.getElementById('overlay').classList.remove('hidden');
+  updateMenuCourseUI();
+  showPanel('menuPanel');
+};
+document.getElementById('btnAgain').onclick = () => initRace();
+document.getElementById('btnMenu').onclick = () => {
+  state = 'menu';
+  audio.stopEngine();
+  document.getElementById('overlay').classList.remove('hidden');
+  updateMenuCourseUI();
+  showPanel('menuPanel');
+};
+document.getElementById('volSlider').oninput = e => {
+  settings.volume = e.target.value / 100;
+  saveSettings();
+};
+document.getElementById('menuCoursePicker').addEventListener('click', e => {
+  const card = e.target.closest('.course-option');
+  if (card) selectCourse(card.dataset.course);
+});
+document.getElementById('settingsRecords').addEventListener('click', e => {
+  const delBtn = e.target.closest('[data-delete]');
+  if (delBtn) deleteCourseRecords(delBtn.dataset.delete);
+});
+loadSettings();
+document.getElementById('volSlider').value = Math.round(settings.volume * 100);
+initTrack(settings.courseId);
+requestAnimationFrame(gameLoop);
+</script>
+</body>
+</html>
