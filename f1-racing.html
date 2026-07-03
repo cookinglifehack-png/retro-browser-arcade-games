@@ -1867,6 +1867,7 @@ const audio = {
   ctx: null,
   engineOsc: null,
   engineGain: null,
+  engineMuted: false,
 
   init() {
     if (this.ctx) return;
@@ -1886,7 +1887,7 @@ const audio = {
   },
 
   updateEngine(speed) {
-    if (!this.ctx) return;
+    if (!this.ctx || this.engineMuted) return;
     const freq = 60 + speed * 0.8;
     this.engineOsc.frequency.setTargetAtTime(freq, this.ctx.currentTime, 0.05);
     this.engineGain.gain.setTargetAtTime(
@@ -1922,13 +1923,19 @@ const audio = {
     osc.stop(this.ctx.currentTime + 0.15);
   },
 
-  // レース終了時などにエンジン音を止める
   stopEngine() {
+    this.engineMuted = true;
     if (!this.ctx || !this.engineGain) return;
-    this.engineGain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.02);
+    this.engineGain.gain.cancelScheduledValues(this.ctx.currentTime);
+    this.engineGain.gain.value = 0;
     if (this.engineOsc) {
-      this.engineOsc.frequency.setTargetAtTime(60, this.ctx.currentTime, 0.05);
+      this.engineOsc.frequency.cancelScheduledValues(this.ctx.currentTime);
+      this.engineOsc.frequency.value = 60;
     }
+  },
+
+  resumeEngine() {
+    this.engineMuted = false;
   }
 };
 
@@ -1957,6 +1964,7 @@ function initRace() {
   document.getElementById('countdown').classList.add('show');
   document.getElementById('countdown').textContent = '3';
   audio.init();
+  audio.resumeEngine();
 }
 
 function formatTime(t) {
@@ -2048,6 +2056,7 @@ function gameLoop(timestamp) {
       if (player.finished) {
         state = 'finishing';
         finishOutroTimer = FINISH_OUTRO_SEC;
+        audio.stopEngine();
       }
     } else {
       finishOutroTimer -= dt;
@@ -2058,7 +2067,7 @@ function gameLoop(timestamp) {
     ghostCarPose = ghostData ? getGhostPoseAt(ghostData, raceTime) : null;
 
     particles.update(dt);
-    audio.updateEngine(player.speed);
+    if (state === 'racing') audio.updateEngine(player.speed);
     updateHUD();
   }
 
